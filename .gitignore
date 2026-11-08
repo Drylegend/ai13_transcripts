@@ -26,8 +26,11 @@ dev-content/
 .sample-content/
 mock-content/
 
-# Content folder (large source files, gitignored)
-content/
+# Content folder (draft source files, gitignored)
+/content/
+
+# Stray CLI artifact
+0.26.0
 
 # OS
 .DS_Store
@@ -38,5 +41,3 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/
-
-.node-version

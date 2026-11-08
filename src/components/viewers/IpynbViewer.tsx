@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fileUrl } from "@/features/content/client";
+import { fileUrl, fetchText } from "@/features/content/client";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { DownloadButton } from "./DownloadButton";
@@ -36,9 +36,8 @@ export default function IpynbViewer({ file }: IpynbViewerProps) {
   } = useQuery({
     queryKey: ["ipynb-json", url],
     queryFn: async ({ signal }) => {
-      const res = await fetch(url, { signal });
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      return (await res.json()) as NotebookJson;
+      const text = await fetchText(file, signal);
+      return JSON.parse(text) as NotebookJson;
     },
     staleTime: Infinity,
   });

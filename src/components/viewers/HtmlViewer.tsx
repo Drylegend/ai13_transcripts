@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
-import { fileUrl } from "@/features/content/client";
+import { fileUrl, fetchText } from "@/features/content/client";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { DownloadButton } from "./DownloadButton";
@@ -21,9 +21,7 @@ export default function HtmlViewer({ file }: HtmlViewerProps) {
   } = useQuery({
     queryKey: ["html-text", url],
     queryFn: async ({ signal }) => {
-      const res = await fetch(url, { signal });
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      return await res.text();
+      return await fetchText(file, signal);
     },
     staleTime: Infinity,
   });

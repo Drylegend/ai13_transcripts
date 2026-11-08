@@ -9,7 +9,10 @@ import {
   SearchIndexSchema,
 } from "../src/features/content/schemas.ts";
 
-const defaultDir = fs.existsSync(path.resolve(process.cwd(), "dev-content")) ? "./dev-content" : "./.sample-content";
+let defaultDir = "./public/content";
+if (!fs.existsSync(path.resolve(process.cwd(), "public/content"))) {
+  defaultDir = fs.existsSync(path.resolve(process.cwd(), "dev-content")) ? "./dev-content" : "./.sample-content";
+}
 const targetDirArg = process.argv[2] || defaultDir;
 const contentDir = path.resolve(process.cwd(), targetDirArg);
 

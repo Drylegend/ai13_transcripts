@@ -29,6 +29,15 @@ BACKUP_DIR = ROOT_DIR / ".ingest_backups"
 STAGING_DIR = ROOT_DIR / ".staging"
 SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
 DEV_CONTENT_DIR = ROOT_DIR / "dev-content"
+SITE_CONTENT_DIR = ROOT_DIR / "public" / "content"
+PUBLISH_LOG_FILE = LOG_DIR / "pending_operations.json"
+
+# Cloudflare Pages Limits (for site target and stats)
+PAGES_MAX_FILES = 20_000
+PAGES_WARN_FILES = 14_000                  # 70% of 20,000
+PAGES_HARD_WARN_FILES = 15_000
+PAGES_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024   # 25 MiB
+PAGES_WARN_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB
 
 # Ensure runtime directories exist
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -82,4 +91,21 @@ def get_r2_credentials() -> dict[str, str]:
         "secret_access_key": secret_key.strip(),
         "bucket": bucket.strip(),
     }
+
+
+def get_default_target() -> str:
+    """Returns the default storage target ('site', 'r2', or 'local').
+
+    Defaults to 'site' when R2 credentials are not configured.
+    """
+    env_target = os.getenv("INGEST_TARGET", "").strip().lower()
+    if env_target in ("site", "r2", "local"):
+        return env_target
+
+    try:
+        get_r2_credentials()
+        return "r2"
+    except Exception:
+        return "site"
+
 

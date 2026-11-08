@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,8 +21,16 @@ from ingest.agents.agent5_publisher import Agent5Publisher
 from ingest.config import (
     BACKUP_DIR,
     DEV_CONTENT_DIR,
+    SITE_CONTENT_DIR,
+    PUBLISH_LOG_FILE,
+    PAGES_MAX_FILES,
+    PAGES_WARN_FILES,
+    PAGES_HARD_WARN_FILES,
+    PAGES_MAX_FILE_SIZE_BYTES,
+    PAGES_WARN_FILE_SIZE_BYTES,
     ROOT_DIR,
     get_content_type,
+    get_default_target,
 )
 from ingest.dialogs import pick_single_file
 from ingest.logger import console, log
@@ -36,15 +45,95 @@ def get_storage(target: str, root_dir: Optional[str] = None) -> StorageBackend:
     if target == "local":
         path = Path(root_dir) if root_dir else DEV_CONTENT_DIR
         return LocalStorage(path)
+    elif target == "site":
+        path = Path(root_dir) if root_dir else SITE_CONTENT_DIR
+        return LocalStorage(path)
     elif target == "r2":
         return R2Storage()
     else:
-        raise ValueError(f"Unknown storage target: '{target}'. Use 'r2' or 'local'.")
+        raise ValueError(f"Unknown storage target: '{target}'. Use 'site', 'r2', or 'local'.")
+
+
+def log_pending_op(description: str) -> None:
+    """Appends an operation description to the pending publish log."""
+    try:
+        entries = []
+        if PUBLISH_LOG_FILE.exists():
+            try:
+                entries = json.loads(PUBLISH_LOG_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                entries = []
+        entries.append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "description": description,
+        })
+        PUBLISH_LOG_FILE.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    except Exception as e:
+        log.warning(f"Could not write to pending operations log: {e}")
+
+
+def get_pending_ops() -> list[str]:
+    """Retrieves list of pending operation descriptions."""
+    try:
+        if PUBLISH_LOG_FILE.exists():
+            entries = json.loads(PUBLISH_LOG_FILE.read_text(encoding="utf-8"))
+            return [e.get("description", "") for e in entries if e.get("description")]
+    except Exception:
+        pass
+    return []
+
+
+def clear_pending_ops() -> None:
+    """Clears pending operations log after publish."""
+    try:
+        if PUBLISH_LOG_FILE.exists():
+            PUBLISH_LOG_FILE.unlink()
+    except Exception as e:
+        log.warning(f"Could not clear pending operations log: {e}")
+
+
+def get_pending_publish_count() -> int:
+    """Returns the count of uncommitted/untracked files in public/content via git status."""
+    try:
+        res = subprocess.run(
+            ["git", "status", "--porcelain", "public/content"],
+            capture_output=True,
+            text=True,
+            cwd=ROOT_DIR,
+            check=False,
+        )
+        if res.returncode == 0:
+            lines = [ln.strip() for ln in res.stdout.splitlines() if ln.strip()]
+            return len(lines)
+    except Exception:
+        pass
+    return len(get_pending_ops())
+
+
+def build_commit_message(pending_ops: list[str], git_summary: str) -> str:
+    """Builds a concise, readable commit message for content publish."""
+    if pending_ops:
+        count = len(pending_ops)
+        if count == 1:
+            return f"content: {pending_ops[0]}"
+        elif count <= 3:
+            return f"content: {', '.join(pending_ops)} ({count} items)"
+        else:
+            first_few = ", ".join(pending_ops[:2])
+            return f"content: {first_few}, and {count - 2} more ({count} items)"
+    return f"content: update {git_summary}"
 
 
 class IngestCLI:
-    def __init__(self, storage: StorageBackend, dry_run: bool = False, auto_yes: bool = False):
+    def __init__(
+        self,
+        storage: StorageBackend,
+        target: str = "site",
+        dry_run: bool = False,
+        auto_yes: bool = False,
+    ):
         self.storage = storage
+        self.target = target
         self.dry_run = dry_run
         self.auto_yes = auto_yes
         self.agent1 = Agent1Normalize()
@@ -105,10 +194,10 @@ class IngestCLI:
 
     # ── Wizard Actions ──
 
-    def action_init(self, silent: bool = False) -> bool:
+    def action_init(self, silent: bool = False, commit: bool = True) -> bool:
         """Initializes empty bootstrap files in the chosen target (index.json and search-index.json)."""
         if not silent:
-            console.print(Panel("[bold]Initialize Content Repository Bootstrap Files[/bold]", style="cyan"))
+            console.print(Panel(f"[bold]Initialize Content Repository Bootstrap Files ({self.target})[/bold]", style="cyan"))
 
         index_data, _ = self.storage.get_json("index.json")
 
@@ -131,9 +220,218 @@ class IngestCLI:
 
         self.storage.put_json("index.json", empty_index, cache="manifest")
         self.storage.put_json("search-index.json", empty_search, cache="manifest")
+
+        # In site mode (or when storage root is public/content), stage & commit bootstrap files
+        if self.target == "site" and commit:
+            try:
+                chk = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=ROOT_DIR)
+                if chk.returncode == 0 and "true" in chk.stdout:
+                    stat = subprocess.run(["git", "status", "--porcelain", "public/content"], capture_output=True, text=True, cwd=ROOT_DIR)
+                    if stat.stdout.strip():
+                        subprocess.run(["git", "add", "public/content"], cwd=ROOT_DIR, check=True)
+                        subprocess.run(["git", "commit", "-m", "chore: initialize content repository"], cwd=ROOT_DIR, check=True)
+                        if not silent:
+                            console.print("[green]Committed bootstrap files to git repository.[/green]")
+            except Exception as e:
+                log.warning(f"Git commit failed during init: {e}")
+
+        log_pending_op("initialize content repository")
         if not silent:
             console.print("[bold green]Successfully initialized repository bootstrap files: index.json and search-index.json[/bold green]")
         return True
+
+    def action_publish(self) -> bool:
+        """Publishes public/content changes via Git commit and push to Cloudflare Pages."""
+        console.print(Panel("[bold]Publish Content to Cloudflare Pages[/bold]", style="cyan"))
+
+        # 1. Check if git repo exists
+        try:
+            chk = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=ROOT_DIR)
+            if chk.returncode != 0 or "true" not in chk.stdout:
+                console.print("[bold red]Error:[/bold red] Not inside a Git repository. Publish requires Git.")
+                return False
+        except FileNotFoundError:
+            console.print("[bold red]Error:[/bold red] Git executable not found on PATH.")
+            return False
+
+        # 2. Check changes in public/content
+        content_stat = subprocess.run(["git", "status", "--porcelain", "public/content"], capture_output=True, text=True, cwd=ROOT_DIR)
+        content_lines = [ln.strip() for ln in content_stat.stdout.splitlines() if ln.strip()]
+
+        if not content_lines:
+            console.print("[yellow]Nothing to publish: public/content has no uncommitted changes.[/yellow]")
+            return True
+
+        # 3. Check other changes in git working tree
+        all_stat = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=ROOT_DIR)
+        other_lines = [
+            ln for ln in all_stat.stdout.splitlines()
+            if ln.strip() and not ("public/content" in ln or "public\\content" in ln)
+        ]
+        if other_lines:
+            console.print("[yellow]Note: you have uncommitted code changes in your working tree. 'publish' commits ONLY public/content; your other changes will remain uncommitted.[/yellow]")
+
+        # 4. Summarize pending changes
+        added_count = sum(1 for ln in content_lines if ln.startswith("?") or ln.startswith("A"))
+        deleted_count = sum(1 for ln in content_lines if "D" in ln[:2])
+        modified_count = len(content_lines) - added_count - deleted_count
+
+        console.print(f"\n[bold]Pending content changes:[/bold] {len(content_lines)} file(s) ({added_count} added, {modified_count} modified, {deleted_count} deleted)")
+        for ln in content_lines[:10]:
+            console.print(f"  • {ln}")
+        if len(content_lines) > 10:
+            console.print(f"  ... and {len(content_lines) - 10} more")
+
+        # 5. Build commit message
+        pending_ops = get_pending_ops()
+        commit_msg = build_commit_message(pending_ops, f"{len(content_lines)} file(s)")
+        console.print(f"\n[bold]Commit message:[/bold] [cyan]{commit_msg}[/cyan]")
+
+        if self.dry_run:
+            console.print("[yellow]Dry-run mode: would commit and push public/content. No changes written.[/yellow]")
+            return True
+
+        # 6. Confirm
+        if not self.auto_yes:
+            if not questionary.confirm("Commit and push to origin/main?").ask():
+                console.print("[yellow]Publish cancelled by user.[/yellow]")
+                return False
+
+        # 7. Execute git add public/content & git commit
+        try:
+            subprocess.run(["git", "add", "public/content"], cwd=ROOT_DIR, check=True)
+            subprocess.run(["git", "commit", "-m", commit_msg], cwd=ROOT_DIR, check=True)
+            console.print("[green]Committed content changes to local git branch.[/green]")
+        except subprocess.CalledProcessError as e:
+            console.print(f"[bold red]Git commit failed:[/bold red] {e}")
+            return False
+
+        # 8. Execute git push
+        try:
+            push_res = subprocess.run(["git", "push"], capture_output=True, text=True, cwd=ROOT_DIR)
+            if push_res.returncode == 0:
+                console.print("[bold green]Pushed to GitHub. Cloudflare Pages will build and deploy in ~1 minute.[/bold green]")
+                console.print("[dim]Remember: each push uses 1 of your 500 free monthly builds. Batch your uploads when possible.[/dim]")
+            else:
+                console.print(f"[yellow]Warning: 'git push' failed ({push_res.stderr.strip() or push_res.stdout.strip()}). Changes are committed locally. Run 'git push' manually when network/remote is ready.[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: 'git push' failed: {e}. Changes are committed locally.[/yellow]")
+
+        # 9. Clear operations log
+        clear_pending_ops()
+        return True
+
+    def action_stats(self) -> None:
+        """Scans storage and reports file count, sizes, and Cloudflare Pages limit consumption."""
+        console.print(Panel("[bold]Content Storage Statistics & Cloudflare Pages Limits[/bold]", style="cyan"))
+
+        files_info: list[tuple[str, int]] = []
+        total_size = 0
+
+        # Scan storage keys
+        try:
+            keys = self.storage.list("")
+            for k in keys:
+                meta = self.storage.head(k)
+                if meta and "size" in meta:
+                    sz = int(meta["size"])
+                    files_info.append((k, sz))
+                    total_size += sz
+        except Exception as e:
+            console.print(f"[red]Error scanning storage:[/red] {e}")
+            return
+
+        total_files = len(files_info)
+        files_info.sort(key=lambda x: x[1], reverse=True)
+        top_5 = files_info[:5]
+
+        # Table of Summary
+        table = Table(title="Storage Overview", style="cyan")
+        table.add_column("Metric", style="bold")
+        table.add_column("Value")
+        table.add_row("Total Files", f"{total_files:,}")
+        table.add_row("Total Content Size", f"{total_size / (1024 * 1024):.2f} MB ({total_size:,} bytes)")
+        if self.target == "site":
+            table.add_row("Target Storage", "public/content (Cloudflare Pages)")
+        elif self.target == "local":
+            table.add_row("Target Storage", "dev-content (local sandbox)")
+        else:
+            table.add_row("Target Storage", "Cloudflare R2 Bucket")
+
+        console.print(table)
+
+        # Top 5 Largest Files
+        if top_5:
+            top_table = Table(title="Top 5 Largest Files", style="blue")
+            top_table.add_column("Path", style="cyan")
+            top_table.add_column("Size", justify="right")
+            for p, sz in top_5:
+                top_table.add_row(p, f"{sz / (1024 * 1024):.2f} MB ({sz:,} B)")
+            console.print(top_table)
+
+        # Cloudflare Pages Limits Check
+        pct_files = (total_files / PAGES_MAX_FILES) * 100
+        max_file_size = top_5[0][1] if top_5 else 0
+        pct_max_file = (max_file_size / PAGES_MAX_FILE_SIZE_BYTES) * 100
+
+        limits_table = Table(title="Cloudflare Pages Free Tier Limits", style="magenta")
+        limits_table.add_column("Limit", style="bold")
+        limits_table.add_column("Current / Max", justify="right")
+        limits_table.add_column("Usage %", justify="right")
+        limits_table.add_column("Status")
+
+        # Files status
+        files_status = "[green]OK[/green]"
+        if total_files > PAGES_HARD_WARN_FILES:
+            files_status = "[bold red]CRITICAL (>75%)[/bold red]"
+        elif total_files > PAGES_WARN_FILES:
+            files_status = "[bold yellow]WARNING (>70%)[/bold yellow]"
+
+        limits_table.add_row(
+            "File Count",
+            f"{total_files:,} / {PAGES_MAX_FILES:,}",
+            f"{pct_files:.1f}%",
+            files_status,
+        )
+
+        # Max file size status
+        file_sz_status = "[green]OK[/green]"
+        if max_file_size > PAGES_MAX_FILE_SIZE_BYTES:
+            file_sz_status = "[bold red]EXCEEDED (>25 MB)[/bold red]"
+        elif max_file_size > 20 * 1024 * 1024:
+            file_sz_status = "[bold red]CRITICAL (>20 MB)[/bold red]"
+        elif max_file_size > PAGES_WARN_FILE_SIZE_BYTES:
+            file_sz_status = "[bold yellow]WARNING (>10 MB)[/bold yellow]"
+
+        limits_table.add_row(
+            "Largest Single File",
+            f"{max_file_size / (1024 * 1024):.2f} MB / 25.00 MB",
+            f"{pct_max_file:.1f}%",
+            file_sz_status,
+        )
+
+        console.print(limits_table)
+
+        # Warnings if thresholds exceeded
+        if total_files > PAGES_HARD_WARN_FILES:
+            console.print(f"[bold red]Warning: Total file count ({total_files:,}) exceeds 75% of Cloudflare Pages limit (20,000 files).[/bold red]")
+        elif total_files > PAGES_WARN_FILES:
+            console.print(f"[bold yellow]Warning: Total file count ({total_files:,}) is approaching Cloudflare Pages limit (20,000 files).[/bold yellow]")
+
+        if max_file_size > PAGES_WARN_FILE_SIZE_BYTES:
+            console.print(f"[bold yellow]Warning: Largest file ({max_file_size / (1024 * 1024):.1f} MB) exceeds 10 MB safety threshold.[/bold yellow]")
+
+        # Git repository size
+        try:
+            chk = subprocess.run(["git", "count-objects", "-vH"], capture_output=True, text=True, cwd=ROOT_DIR)
+            if chk.returncode == 0:
+                for line in chk.stdout.splitlines():
+                    if line.startswith("size:"):
+                        console.print(f"[dim]Approximate git repo object size: {line.split(':', 1)[1].strip()}[/dim]")
+        except Exception:
+            pass
+
+        console.print("[dim]Tip: Cloudflare Pages free tier allows up to 20,000 files and 25 MiB per file. Deleted and replaced files remain in your Git history; use external storage (R2) if your repo exceeds 1-2 GB.[/dim]")
 
     def action_create_module(
         self,
@@ -222,30 +520,47 @@ class IngestCLI:
         self.storage.put_json("index.json", index_data, cache="manifest")
         self.agent5.recompute_search_index(slug)
 
+        log_pending_op(f"create module '{slug}'")
         console.print(f"[bold green]Successfully created module '{title}' ({slug})![/bold green]")
         return True
 
-    def action_create_day(self) -> None:
+    def action_create_day(
+        self,
+        module_slug: Optional[str] = None,
+        day_number: Optional[int] = None,
+        title: Optional[str] = None,
+        subtitle: Optional[str] = None,
+        description: Optional[str] = None,
+        recap: Optional[str] = None,
+    ) -> None:
         console.print(Panel("[bold]Create a Course Day[/bold]", style="cyan"))
-        slug = self.select_module()
+        slug = module_slug or self.select_module()
         if not slug: return
 
-        proposed_num = self.agent3.get_next_day_number(slug)
-        day_str = questionary.text("Day Number:", default=str(proposed_num)).ask()
-        if not day_str or not day_str.isdigit(): return
-        day_num = int(day_str)
-
-        # Check conflict
         manifest, _ = self.storage.get_json(f"modules/{slug}/manifest.json")
-        existing_days = [d.get("number") for d in manifest.get("days", [])] if manifest else []
-        if day_num in existing_days:
-            if not questionary.confirm(f"Day {day_num} already exists in this module. Update its meta?").ask():
-                return
 
-        title = questionary.text("Day Title:", default=f"Day {day_num}").ask() or f"Day {day_num}"
-        subtitle = questionary.text("Subtitle:", default="").ask() or ""
-        description = questionary.text("Description:", default="").ask() or ""
-        recap = questionary.text("In a nutshell / class recap:", default="").ask() or ""
+        if day_number is not None:
+            day_num = day_number
+            title = title or f"Day {day_num}"
+            subtitle = subtitle or ""
+            description = description or ""
+            recap = recap or ""
+        else:
+            proposed_num = self.agent3.get_next_day_number(slug)
+            day_str = questionary.text("Day Number:", default=str(proposed_num)).ask()
+            if not day_str or not day_str.isdigit(): return
+            day_num = int(day_str)
+
+            # Check conflict
+            existing_days = [d.get("number") for d in manifest.get("days", [])] if manifest else []
+            if day_num in existing_days:
+                if not questionary.confirm(f"Day {day_num} already exists in this module. Update its meta?").ask():
+                    return
+
+            title = questionary.text("Day Title:", default=f"Day {day_num}").ask() or f"Day {day_num}"
+            subtitle = questionary.text("Subtitle:", default="").ask() or ""
+            description = questionary.text("Description:", default="").ask() or ""
+            recap = questionary.text("In a nutshell / class recap:", default="").ask() or ""
 
         folder = Agent2Placement.day_folder(day_num)
         day_json_key = f"modules/{slug}/days/{folder}/day.json"
@@ -303,6 +618,7 @@ class IngestCLI:
         self.agent5.recompute_root_index()
         self.agent5.recompute_search_index(slug)
 
+        log_pending_op(f"create Day {day_num} in '{slug}'")
         console.print(f"[bold green]Successfully created/updated Day {day_num} in '{slug}'![/bold green]")
 
     def action_add_summary(
@@ -401,6 +717,7 @@ class IngestCLI:
                     self.agent4.rollback(change_set)
                     return
 
+            log_pending_op(f"add Day {day_num} summary in '{slug}'")
             console.print(f"[bold green]Summary successfully uploaded to Day {day_num}![/bold green]")
         finally:
             self.agent1.cleanup()
@@ -512,6 +829,7 @@ class IngestCLI:
                     self.agent4.rollback(change_set)
                     return
 
+            log_pending_op(f"add transcript '{title}' to Day {day_num}")
             console.print(f"[bold green]Transcript {order} ('{title}') successfully added to Day {day_num}![/bold green]")
         finally:
             self.agent1.cleanup()
@@ -620,6 +938,7 @@ class IngestCLI:
                     self.agent4.rollback(change_set)
                     return
 
+            log_pending_op(f"add board photo to Day {day_num}")
             console.print(f"[bold green]Board photo successfully uploaded to Day {day_num}![/bold green]")
         finally:
             self.agent1.cleanup()
@@ -722,6 +1041,7 @@ class IngestCLI:
                 self.agent4.rollback(change_set)
                 return
 
+        log_pending_op(f"add {len(parsed_questions)} questions to Day {day_num}")
         console.print(f"[bold green]Successfully merged {len(parsed_questions)} questions into Day {day_num}![/bold green]")
 
     def action_add_link(self) -> None:
@@ -763,6 +1083,7 @@ class IngestCLI:
 
         self.storage.put_json(day_key, day_json, cache="manifest")
         self.agent5.recompute_manifest(slug)
+        log_pending_op(f"add link '{label}' to Day {day_num}")
         console.print(f"[bold green]Link '{label}' successfully added to Day {day_num}![/bold green]")
 
     def action_create_lab(self) -> None:
@@ -825,6 +1146,7 @@ class IngestCLI:
         self.agent5.recompute_root_index()
         self.agent5.recompute_search_index(slug)
 
+        log_pending_op(f"create Lab {lab_id} in '{slug}'")
         console.print(f"[bold green]Successfully created Lab {lab_id} ('{title}')![/bold green]")
 
     def action_add_lab_notes(self) -> None:
@@ -886,6 +1208,7 @@ class IngestCLI:
             self.agent5.recompute_manifest(slug)
             self.agent5.recompute_root_index()
 
+            log_pending_op(f"add notes to Lab {lab_id}")
             console.print(f"[bold green]Lab notes successfully uploaded to {lab_id}![/bold green]")
         finally:
             self.agent1.cleanup()
@@ -968,39 +1291,10 @@ class IngestCLI:
             self.agent5.recompute_manifest(slug)
             self.agent5.recompute_visuals_index(slug)
 
+            log_pending_op(f"add doodle to Lab {lab_id}")
             console.print(f"[bold green]Lab doodle successfully attached to {lab_id}![/bold green]")
         finally:
             self.agent1.cleanup()
-            thumb_ref = {
-                "path": dest_thumb_key,
-                "format": "webp",
-                "sizeBytes": staged.staged_thumb.stat().st_size,
-                "hash": self.agent1._calc_hash(staged.staged_thumb),
-                "updatedAt": staged.updated_at,
-            }
-
-        lab_key = f"modules/{slug}/labs/{lab_id}/lab.json"
-        lab_json, _ = self.storage.get_json(lab_key)
-        if not lab_json:
-            lab_json = {"id": lab_id, "number": 1, "category": "hands-on", "title": lab_id}
-
-        lab_json["doodle"] = {
-            "path": dest_img_key,
-            "format": staged.format,
-            "sizeBytes": staged.size_bytes,
-            "hash": staged.sha256_short,
-            "updatedAt": staged.updated_at,
-        }
-        if thumb_ref:
-            lab_json["thumb"] = thumb_ref
-
-        lab_json["updatedAt"] = staged.updated_at
-        self.storage.put_json(lab_key, lab_json, cache="manifest")
-
-        self.agent5.recompute_manifest(slug)
-        self.agent5.recompute_visuals_index(slug)
-
-        console.print(f"[bold green]Lab doodle successfully attached to {lab_id}![/bold green]")
 
     def action_remove(
         self,
@@ -1603,7 +1897,15 @@ class IngestCLI:
 
     def run_wizard(self) -> None:
         """Main interactive wizard loop processing ONE item at a time."""
-        console.print(Panel("[bold cyan]AI-13 Course Notes Ingest Tool[/bold cyan]\n[dim]One-Item-at-a-Time Content Publisher[/dim]", style="blue"))
+        pending_count = get_pending_publish_count()
+        header_text = (
+            f"[bold cyan]AI-13 Course Notes Ingest Tool[/bold cyan]\n"
+            f"[dim]One-Item-at-a-Time Content Publisher | Target: [bold]{self.target}[/bold]"
+        )
+        if self.target == "site":
+            header_text += f" | [yellow]{pending_count} pending publish[/yellow]"
+        header_text += "[/dim]"
+        console.print(Panel(header_text, style="blue"))
 
         # Auto-initialize if index.json is missing
         index_data, _ = self.storage.get_json("index.json")
@@ -1662,16 +1964,59 @@ class IngestCLI:
                 log.exception("Error in wizard action")
 
             console.print("")
-            if not questionary.confirm("Add another item?").ask():
-                console.print("[dim]Ingest session finished. Have a great day![/dim]")
-                break
+            if self.target == "site":
+                next_choice = questionary.select(
+                    "What next?",
+                    choices=[
+                        "Add another item",
+                        "Publish now (git push to Cloudflare Pages)",
+                        "Done for now (publish later)",
+                    ],
+                ).ask()
+
+                if next_choice == "Publish now (git push to Cloudflare Pages)":
+                    self.action_publish()
+                    console.print("[dim]Publish completed. Have a great day![/dim]")
+                    break
+                elif next_choice == "Done for now (publish later)":
+                    p_count = get_pending_publish_count()
+                    console.print(f"[yellow]You have {p_count} item(s) pending publish. Run `python ingest.py publish` when ready.[/yellow]")
+                    break
+                elif not next_choice:
+                    break
+            else:
+                if not questionary.confirm("Add another item?").ask():
+                    console.print("[dim]Ingest session finished. Have a great day![/dim]")
+                    break
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AI-13 Course Portal Content Ingest CLI")
-    parser.add_argument("subcommand", nargs="?", default="wizard",
-                        choices=["wizard", "init", "check-connection", "list", "verify", "rebuild-index", "undo", "questions-template", "remove"])
-    parser.add_argument("--target", choices=["r2", "local"], default="r2", help="Storage target (r2 | local)")
+    parser.add_argument(
+        "subcommand",
+        nargs="?",
+        default="wizard",
+        choices=[
+            "wizard",
+            "init",
+            "publish",
+            "stats",
+            "check-connection",
+            "list",
+            "verify",
+            "rebuild-index",
+            "undo",
+            "questions-template",
+            "remove",
+        ],
+    )
+    default_target = get_default_target()
+    parser.add_argument(
+        "--target",
+        choices=["site", "r2", "local"],
+        default=default_target,
+        help=f"Storage target (site | r2 | local, default: {default_target})",
+    )
     parser.add_argument("--root", default=None, help="Root directory for local storage target")
     parser.add_argument("--module", default=None, help="Target module slug for verify")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without writing")
@@ -1706,9 +2051,15 @@ def main() -> None:
 
     # Initialize storage
     storage = get_storage(args.target, args.root)
-    cli = IngestCLI(storage, dry_run=args.dry_run, auto_yes=args.yes)
+    cli = IngestCLI(storage, target=args.target, dry_run=args.dry_run, auto_yes=args.yes)
 
-    if args.subcommand == "check-connection":
+    if args.subcommand == "publish":
+        cli.action_publish()
+
+    elif args.subcommand == "stats":
+        cli.action_stats()
+
+    elif args.subcommand == "check-connection":
         console.print(f"[cyan]Testing connection to {args.target.upper()} storage...[/cyan]")
         if args.target == "r2":
             assert isinstance(storage, R2Storage)
@@ -1727,7 +2078,12 @@ def main() -> None:
             console.print("[yellow]Storage is empty. No index.json found.[/yellow]")
             return
 
-        tree = Tree("[bold cyan]Course Portal Content Tree[/bold cyan]")
+        pending_count = get_pending_publish_count() if args.target == "site" else 0
+        header = f"[bold cyan]Course Portal Content Tree[/bold cyan] [dim](Target: {args.target}"
+        if args.target == "site":
+            header += f" | {pending_count} pending publish"
+        header += ")[/dim]"
+        tree = Tree(header)
         for mod in index_data.get("modules", []):
             slug = mod["slug"]
             m_node = tree.add(f"[bold]{mod['title']}[/bold] ({slug}) - {mod.get('dayCount', 0)} days, {mod.get('labCount', 0)} labs")

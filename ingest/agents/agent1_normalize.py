@@ -69,11 +69,11 @@ class Agent1Normalize:
         # Check raw size limits
         if raw_size > DOC_SIZE_MAX_BYTES:
             raise ValueError(
-                f"File size ({raw_size / 1024 / 1024:.1f} MB) exceeds maximum allowed {DOC_SIZE_MAX_BYTES / 1024 / 1024:.0f} MB."
+                f"Cloudflare Pages limit is 25 MiB per file. Compress or host elsewhere: {source_path.name} ({raw_size / 1024 / 1024:.1f} MiB)"
             )
         if raw_size > DOC_SIZE_WARN_BYTES:
             self.warnings.append(
-                f"File size ({raw_size / 1024 / 1024:.1f} MB) is large (>10 MB). Cloudflare R2 will serve it, but mobile downloads may be slower."
+                f"File size ({raw_size / 1024 / 1024:.1f} MB) is large (>10 MB). Cloudflare Pages limit is 25 MiB per file; downloads may be slower."
             )
 
         now_iso = datetime.now(timezone.utc).isoformat()

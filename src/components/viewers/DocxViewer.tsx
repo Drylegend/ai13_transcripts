@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fileUrl } from "@/features/content/client";
+import { fileUrl, fetchBlob } from "@/features/content/client";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { DownloadButton } from "./DownloadButton";
@@ -27,9 +27,7 @@ export default function DocxViewer({ file }: DocxViewerProps) {
   } = useQuery({
     queryKey: ["docx-blob", url],
     queryFn: async ({ signal }) => {
-      const res = await fetch(url, { signal });
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      return await res.blob();
+      return await fetchBlob(file, signal);
     },
     staleTime: Infinity,
   });

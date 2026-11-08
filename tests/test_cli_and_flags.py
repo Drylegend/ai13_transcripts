@@ -414,7 +414,7 @@ def test_init_creates_bootstrap_files(tmp_path):
     assert not storage.exists("index.json")
     assert not storage.exists("search-index.json")
 
-    ok = cli.action_init()
+    ok = cli.action_init(commit=False)
     assert ok is True
     assert storage.exists("index.json")
     assert storage.exists("search-index.json")
@@ -425,4 +425,126 @@ def test_init_creates_bootstrap_files(tmp_path):
 
     search, _ = storage.get_json("search-index.json")
     assert search == []
+
+
+def test_site_target_e2e_and_validation(tmp_path):
+    """Verifies that an e2e ingest flow works with --target site."""
+    content_dir = tmp_path / "public" / "content"
+    storage = LocalStorage(str(content_dir))
+    cli = IngestCLI(storage, target="site", auto_yes=True)
+
+    # 1. Init
+    cli.action_init(commit=False)
+
+    # 2. Create Module
+    cli.action_create_module(
+        title="MLOps Fundamentals",
+        slug="mlops-fundamentals",
+        subtitle="End-to-end MLOps",
+        description="Module description",
+        course_code="AI-300",
+    )
+
+    # 3. Create Day 1
+    cli.action_create_day(
+        module_slug="mlops-fundamentals",
+        day_number=1,
+        title="Day 1",
+        subtitle="Introduction",
+        description="Day 1 overview",
+    )
+
+    # 4. Add Summary
+    summary_file = tmp_path / "day1_summary.md"
+    summary_file.write_text("# Day 1 Summary\n\nIntroductory concepts for MLOps.", encoding="utf-8")
+    cli.action_add_summary(
+        module_slug="mlops-fundamentals",
+        day_number=1,
+        file_path_override=str(summary_file),
+    )
+
+    # 5. Verify all checks pass
+    checks = cli.agent4.verify_all()
+    failed = [c for c in checks if not c.passed]
+    assert len(failed) == 0, f"Validation failed: {failed}"
+
+
+def test_publish_workflow_in_git_repo(tmp_path, monkeypatch):
+    """Verifies git publish commits ONLY public/content and ignores outside changes."""
+    import subprocess
+    import ingest.cli as cli_mod
+
+    # Setup git repo in tmp_path
+    monkeypatch.setattr(cli_mod, "ROOT_DIR", tmp_path)
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "ci@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "CI Bot"], cwd=tmp_path, check=True)
+
+    content_dir = tmp_path / "public" / "content"
+    content_dir.mkdir(parents=True)
+    (tmp_path / "readme.txt").write_text("outside file", encoding="utf-8")
+    subprocess.run(["git", "add", "readme.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "initial commit"], cwd=tmp_path, check=True)
+
+    storage = LocalStorage(str(content_dir))
+    cli = IngestCLI(storage, target="site", auto_yes=True)
+
+    # 1. Nothing to publish when public/content is clean
+    res = cli.action_publish()
+    assert res is True
+
+    # 2. Modify an outside file
+    (tmp_path / "readme.txt").write_text("modified outside file", encoding="utf-8")
+
+    # 3. Add a content file in public/content
+    (content_dir / "index.json").write_text('{"version": "1", "modules": []}', encoding="utf-8")
+    cli_mod.log_pending_op("initialize content repository")
+
+    # 4. Run publish
+    pub_res = cli.action_publish()
+    assert pub_res is True
+
+    # 5. Verify git status: public/content is committed, readme.txt is STILL modified & uncommitted
+    stat = subprocess.run(["git", "status", "--porcelain"], cwd=tmp_path, capture_output=True, text=True, check=True)
+    output = stat.stdout.strip()
+    assert "public/content" not in output
+    assert "readme.txt" in output
+
+    # Verify commit log
+    log_res = subprocess.run(["git", "log", "-1", "--pretty=%B"], cwd=tmp_path, capture_output=True, text=True, check=True)
+    assert "content: initialize content repository" in log_res.stdout
+
+
+def test_file_size_limits_25mb_rejection_and_10mb_warning(tmp_path):
+    """Verifies that files > 25 MiB are rejected and files > 10 MiB trigger warnings."""
+    agent1 = Agent1Normalize()
+
+    # 26 MiB file
+    big_file = tmp_path / "oversized.docx"
+    with open(big_file, "wb") as f:
+        f.seek(26 * 1024 * 1024)
+        f.write(b"\0")
+
+    with pytest.raises(ValueError, match="Cloudflare Pages limit is 25 MiB per file"):
+        agent1.process(big_file)
+
+    # 11 MiB file (warning)
+    warn_file = tmp_path / "large_note.md"
+    with open(warn_file, "wb") as f:
+        f.seek(11 * 1024 * 1024)
+        f.write(b"# Large Note\n")
+
+    staged = agent1.process(warn_file)
+    assert staged is not None
+    assert any("large (>10 MB)" in w for w in agent1.warnings)
+    agent1.cleanup()
+
+
+def test_stats_command_reporting(tmp_path):
+    """Verifies stats subcommand scans storage and prints summary without error."""
+    storage = LocalStorage(str(tmp_path))
+    cli = IngestCLI(storage, target="site", auto_yes=True)
+    cli.action_init(commit=False)
+    cli.action_stats()
+
 

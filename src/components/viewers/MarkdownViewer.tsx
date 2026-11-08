@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { fileUrl } from "@/features/content/client";
+import { fileUrl, fetchText } from "@/features/content/client";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { DownloadButton } from "./DownloadButton";
@@ -101,9 +101,7 @@ export default function MarkdownViewer({ file }: MarkdownViewerProps) {
   } = useQuery({
     queryKey: ["markdown-text", url],
     queryFn: async ({ signal }) => {
-      const res = await fetch(url, { signal });
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      return await res.text();
+      return await fetchText(file, signal);
     },
     staleTime: Infinity,
   });

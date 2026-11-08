@@ -1,6 +1,19 @@
-const isProd = import.meta.env.PROD;
-const envBaseUrl = import.meta.env.VITE_CONTENT_BASE_URL;
-const trimmedBaseUrl = typeof envBaseUrl === "string" ? envBaseUrl.trim() : "";
+const appBase = (import.meta.env.BASE_URL || "/").replace(/\/+$/, "");
+const defaultContentBase = `${appBase}/content`.replace(/\/+/g, "/").replace(/\/$/, "");
+
+const rawEnvBaseUrl = import.meta.env.VITE_CONTENT_BASE_URL;
+let resolvedContentBase = defaultContentBase;
+
+if (typeof rawEnvBaseUrl === "string" && rawEnvBaseUrl.trim()) {
+  const trimmed = rawEnvBaseUrl.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("/")) {
+    resolvedContentBase = trimmed.replace(/\/+$/, "");
+  } else {
+    console.warn(
+      `[site.ts] Invalid VITE_CONTENT_BASE_URL '${trimmed}'. Expected absolute URL or leading '/'. Falling back to '${defaultContentBase}'.`
+    );
+  }
+}
 
 export const SITE_CONFIG = {
   /** Display name shown in header and page titles */
@@ -9,10 +22,10 @@ export const SITE_CONFIG = {
   tagline: "Summaries, transcripts, labs & visual notes — all in one place.",
   /** Path to the logo image in /public (null if not yet provided) */
   logoPath: "/logo.png" as string | null,
-  /** Base URL for R2-hosted content (manifests, docx, images, etc.) */
-  contentBaseUrl: isProd ? trimmedBaseUrl : (trimmedBaseUrl || "/mock-content"),
-  /** Whether content URL is configured for production */
-  isConfigured: !isProd || Boolean(trimmedBaseUrl),
+  /** Base URL for content (public/content in zero-config site mode, or R2 bucket URL) */
+  contentBaseUrl: resolvedContentBase,
+  /** Whether content URL is configured (always true in zero-config site mode) */
+  isConfigured: true,
   /** Prefix for all localStorage keys to avoid collisions */
   storageKeyPrefix: "ai13",
 } as const;
