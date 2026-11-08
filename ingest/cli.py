@@ -92,22 +92,184 @@ def clear_pending_ops() -> None:
         log.warning(f"Could not clear pending operations log: {e}")
 
 
-def get_pending_publish_count() -> int:
-    """Returns the count of uncommitted/untracked files in public/content via git status."""
+def format_file_size(size_bytes: int) -> str:
+    """Formats file size into human readable string."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+def check_forbidden_file(rel_path: str, size_bytes: int) -> tuple[bool, Optional[str]]:
+    """Enforces publish safety rails (.env*, .staging, .ingest_backups, .ingest_logs, node_modules, dist, >25MB)."""
+    norm = rel_path.replace("\\", "/").strip().lstrip("./")
+    parts = norm.split("/")
+
+    # 1. Environment and secret files (.env, .env.*)
+    for p in parts:
+        if p == ".env" or p.startswith(".env.") or p.startswith(".env"):
+            return True, f"environment/secrets file '{norm}' must never be committed"
+
+    # 2. Excluded runtime and build directories
+    forbidden_dirs = {".staging", ".ingest_backups", ".ingest_logs", "node_modules", "dist"}
+    for p in parts:
+        if p in forbidden_dirs:
+            return True, f"excluded directory '{p}' in '{norm}' must never be committed"
+
+    # 3. Oversized file (> 25 MiB)
+    if size_bytes > 25 * 1024 * 1024:
+        mb = size_bytes / (1024 * 1024)
+        return True, f"file '{norm}' ({mb:.1f} MiB) exceeds Cloudflare's 25 MiB per-file limit"
+
+    return False, None
+
+
+def get_git_status_partitions(root_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Runs git status --porcelain -uall and partitions pending changes into:
+      - content_items: files under public/content/
+      - other_items: tracked modifications and untracked files outside public/content/
+    """
+    res = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],
+        capture_output=True,
+        text=True,
+        cwd=root_dir,
+        check=False,
+    )
+    if res.returncode != 0:
+        return [], []
+
+    content_items = []
+    other_items = []
+
+    for raw_line in res.stdout.splitlines():
+        if not raw_line.strip():
+            continue
+        status_code = raw_line[:2].strip()
+        raw_path = raw_line[2:].strip().strip('"')
+        if " -> " in raw_path:
+            raw_path = raw_path.split(" -> ")[-1].strip().strip('"')
+
+        norm_path = raw_path.replace("\\", "/").strip().lstrip("./")
+        full_path = root_dir / norm_path
+        size = full_path.stat().st_size if full_path.is_file() else 0
+
+        is_forb, forb_reason = check_forbidden_file(norm_path, size)
+
+        item = {
+            "status": status_code or "M",
+            "path": norm_path,
+            "size": size,
+            "is_forbidden": is_forb,
+            "forbidden_reason": forb_reason,
+        }
+
+        if norm_path.startswith("public/content/") or norm_path == "public/content":
+            content_items.append(item)
+        else:
+            other_items.append(item)
+
+    return content_items, other_items
+
+
+def get_unpushed_commits(root_dir: Path) -> list[str]:
+    """Returns list of oneline commit summaries not yet pushed to the remote."""
+    try:
+        chk = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=root_dir)
+        if chk.returncode != 0:
+            return []
+
+        u_chk = subprocess.run(["git", "rev-parse", "--verify", "--quiet", "@{u}"], capture_output=True, text=True, cwd=root_dir)
+        if u_chk.returncode == 0:
+            res = subprocess.run(["git", "log", "@{u}..HEAD", "--oneline"], capture_output=True, text=True, cwd=root_dir)
+            if res.returncode == 0:
+                return [ln.strip() for ln in res.stdout.splitlines() if ln.strip()]
+
+        b_res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, cwd=root_dir)
+        branch = b_res.stdout.strip() or "main"
+        o_chk = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"origin/{branch}"], capture_output=True, text=True, cwd=root_dir)
+        if o_chk.returncode == 0:
+            res = subprocess.run(["git", "log", f"origin/{branch}..HEAD", "--oneline"], capture_output=True, text=True, cwd=root_dir)
+            if res.returncode == 0:
+                return [ln.strip() for ln in res.stdout.splitlines() if ln.strip()]
+
+        r_chk = subprocess.run(["git", "remote"], capture_output=True, text=True, cwd=root_dir)
+        if r_chk.stdout.strip():
+            res = subprocess.run(["git", "log", "--oneline"], capture_output=True, text=True, cwd=root_dir)
+            if res.returncode == 0:
+                return [ln.strip() for ln in res.stdout.splitlines() if ln.strip()]
+    except Exception:
+        pass
+    return []
+
+
+def get_github_commit_url(root_dir: Path, commit_hash: str) -> Optional[str]:
+    """Resolves commit web URL on GitHub based on git remote origin."""
+    try:
+        res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=root_dir)
+        if res.returncode != 0:
+            return None
+        url = res.stdout.strip()
+        if url.startswith("git@github.com:"):
+            repo_part = url[len("git@github.com:"):].rstrip(".git")
+            return f"https://github.com/{repo_part}/commit/{commit_hash}"
+        elif "github.com" in url:
+            base = url.rstrip(".git")
+            if not base.startswith("http"):
+                base = f"https://{base}"
+            return f"{base}/commit/{commit_hash}"
+    except Exception:
+        pass
+    return None
+
+
+def generate_other_commit_message(other_items: list[dict[str, Any]]) -> str:
+    """Generates an intuitive, readable commit message for non-content project files."""
+    if not other_items:
+        return "chore: update project files"
+    names = []
+    for it in other_items:
+        p = it["path"]
+        parts = p.split("/")
+        if len(parts) > 2:
+            names.append(f"{parts[0]}/.../{parts[-1]}")
+        else:
+            names.append(p)
+    if len(names) == 1:
+        return f"chore: update {names[0]}"
+    elif len(names) <= 3:
+        return f"chore: update {', '.join(names)}"
+    else:
+        return f"chore: update {', '.join(names[:2])}, and {len(names) - 2} more"
+
+
+def get_pending_publish_count(root_dir: Optional[Path] = None) -> int:
+    """Returns the count of uncommitted/untracked files in public/content plus unpushed commits."""
+    cwd = root_dir or ROOT_DIR
+    count = 0
     try:
         res = subprocess.run(
             ["git", "status", "--porcelain", "public/content"],
             capture_output=True,
             text=True,
-            cwd=ROOT_DIR,
+            cwd=cwd,
             check=False,
         )
         if res.returncode == 0:
             lines = [ln.strip() for ln in res.stdout.splitlines() if ln.strip()]
-            return len(lines)
+            count += len(lines)
+    except Exception:
+        count += len(get_pending_ops())
+
+    try:
+        unpushed = get_unpushed_commits(cwd)
+        count += len(unpushed)
     except Exception:
         pass
-    return len(get_pending_ops())
+    return count
 
 
 def build_commit_message(pending_ops: list[str], git_summary: str) -> str:
@@ -131,11 +293,19 @@ class IngestCLI:
         target: str = "site",
         dry_run: bool = False,
         auto_yes: bool = False,
+        git_dir: Optional[Path] = None,
+        include_all: bool = False,
+        content_only: bool = False,
+        no_check: bool = False,
     ):
         self.storage = storage
         self.target = target
         self.dry_run = dry_run
         self.auto_yes = auto_yes
+        self.git_dir = Path(git_dir).resolve() if git_dir else ROOT_DIR
+        self.include_all = include_all
+        self.content_only = content_only
+        self.no_check = no_check
         Agent1Normalize.clean_all_staging()
         self.agent1 = Agent1Normalize()
         self.agent2 = Agent2Placement(storage)
@@ -241,13 +411,103 @@ class IngestCLI:
             console.print("[bold green]Successfully initialized repository bootstrap files: index.json and search-index.json[/bold green]")
         return True
 
-    def action_publish(self) -> bool:
-        """Publishes public/content changes via Git commit and push to Cloudflare Workers."""
-        console.print(Panel("[bold]Publish Content to Cloudflare Workers Static Assets[/bold]", style="cyan"))
+    def run_project_checks(self, cwd: Optional[Path] = None) -> tuple[bool, str]:
+        """Runs npm run typecheck and npm run build before committing non-content files."""
+        target_dir = cwd or self.git_dir
+        pkg_json = target_dir / "package.json"
+        if not pkg_json.is_file():
+            return True, "No package.json found"
 
-        # 1. Check if git repo exists
+        tc_res = subprocess.run(
+            "npm run typecheck",
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=target_dir,
+        )
+        if tc_res.returncode != 0:
+            err = tc_res.stderr.strip() or tc_res.stdout.strip()
+            return False, f"npm run typecheck failed:\n{err}"
+
+        build_res = subprocess.run(
+            "npm run build",
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=target_dir,
+        )
+        if build_res.returncode != 0:
+            err = build_res.stderr.strip() or build_res.stdout.strip()
+            return False, f"npm run build failed:\n{err}"
+
+        return True, "Typecheck and build succeeded"
+
+    def perform_git_push(self, cwd: Path) -> tuple[bool, Optional[str]]:
+        """Handles fetch, rebase on upstream commits, and pushing to remote."""
+        remotes_proc = subprocess.run(["git", "remote"], capture_output=True, text=True, cwd=cwd)
+        remotes = [r.strip() for r in remotes_proc.stdout.splitlines() if r.strip()]
+        if not remotes:
+            return False, "No git remote configured on this repository."
+
+        remote_name = "origin" if "origin" in remotes else remotes[0]
+
+        branch_proc = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, cwd=cwd)
+        current_branch = branch_proc.stdout.strip() or "main"
+
+        # 1. Fetch
+        fetch_proc = subprocess.run(["git", "fetch", remote_name], capture_output=True, text=True, cwd=cwd)
+        if fetch_proc.returncode == 0:
+            rev_chk = subprocess.run(
+                ["git", "rev-list", f"HEAD..{remote_name}/{current_branch}", "--count"],
+                capture_output=True,
+                text=True,
+                cwd=cwd,
+            )
+            if rev_chk.returncode == 0:
+                behind_count = int(rev_chk.stdout.strip() or "0")
+                if behind_count > 0:
+                    console.print(f"[yellow]Remote has {behind_count} new commit(s). Running 'git pull --rebase' to integrate remote changes...[/yellow]")
+                    rebase_proc = subprocess.run(
+                        ["git", "pull", "--rebase", remote_name, current_branch],
+                        capture_output=True,
+                        text=True,
+                        cwd=cwd,
+                    )
+                    if rebase_proc.returncode != 0:
+                        subprocess.run(["git", "rebase", "--abort"], cwd=cwd, capture_output=True)
+                        err_instructions = (
+                            f"A merge conflict occurred during 'git pull --rebase {remote_name} {current_branch}'.\n"
+                            "The rebase has been automatically aborted to preserve your work.\n\n"
+                            "To resolve:\n"
+                            f"  1. Run: git pull --no-rebase {remote_name} {current_branch}\n"
+                            "  2. Open and resolve any conflict markers (<<<<<<< / ======= / >>>>>>>).\n"
+                            f"  3. Run: git commit -m 'merge remote {current_branch}'\n"
+                            "  4. Re-run: python ingest.py publish"
+                        )
+                        return False, err_instructions
+                    console.print("[green]Rebase completed cleanly.[/green]")
+
+        # 2. Push
+        push_proc = subprocess.run(["git", "push", "-u", remote_name, current_branch], capture_output=True, text=True, cwd=cwd)
+        if push_proc.returncode != 0:
+            err = push_proc.stderr.strip() or push_proc.stdout.strip()
+            return False, f"'git push' failed: {err}"
+
+        return True, None
+
+    def action_publish(
+        self,
+        include_all: Optional[bool] = None,
+        content_only: Optional[bool] = None,
+        no_check: Optional[bool] = None,
+    ) -> bool:
+        """Publishes pending content and project changes via Git commit and push to Cloudflare Workers."""
+        console.print(Panel("[bold]Publish to Cloudflare Workers Static Assets[/bold]", style="cyan"))
+        target_dir = self.git_dir
+
+        # 1. Verify inside git repo
         try:
-            chk = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=ROOT_DIR)
+            chk = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=target_dir)
             if chk.returncode != 0 or "true" not in chk.stdout:
                 console.print("[bold red]Error:[/bold red] Not inside a Git repository. Publish requires Git.")
                 return False
@@ -255,72 +515,227 @@ class IngestCLI:
             console.print("[bold red]Error:[/bold red] Git executable not found on PATH.")
             return False
 
-        # 2. Check changes in public/content
-        content_stat = subprocess.run(["git", "status", "--porcelain", "public/content"], capture_output=True, text=True, cwd=ROOT_DIR)
-        content_lines = [ln.strip() for ln in content_stat.stdout.splitlines() if ln.strip()]
+        # 2. Partition pending changes & check unpushed commits
+        content_items, other_items = get_git_status_partitions(target_dir)
+        unpushed_commits = get_unpushed_commits(target_dir)
 
-        if not content_lines:
-            console.print("[yellow]Nothing to publish: public/content has no uncommitted changes.[/yellow]")
+        if not content_items and not other_items and not unpushed_commits:
+            console.print("[yellow]Nothing to publish: no uncommitted changes and all local commits are already on GitHub.[/yellow]")
             return True
 
-        # 3. Check other changes in git working tree
-        all_stat = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=ROOT_DIR)
-        other_lines = [
-            ln for ln in all_stat.stdout.splitlines()
-            if ln.strip() and not ("public/content" in ln or "public\\content" in ln)
-        ]
-        if other_lines:
-            console.print("[yellow]Note: you have uncommitted code changes in your working tree. 'publish' commits ONLY public/content; your other changes will remain uncommitted.[/yellow]")
+        content_size = sum(it["size"] for it in content_items)
+        other_size = sum(it["size"] for it in other_items)
 
-        # 4. Summarize pending changes
-        added_count = sum(1 for ln in content_lines if ln.startswith("?") or ln.startswith("A"))
-        deleted_count = sum(1 for ln in content_lines if "D" in ln[:2])
-        modified_count = len(content_lines) - added_count - deleted_count
+        # 3. Determine flags
+        flag_all = include_all if include_all is not None else self.include_all
+        flag_content_only = content_only if content_only is not None else self.content_only
+        flag_no_check = no_check if no_check is not None else self.no_check
 
-        console.print(f"\n[bold]Pending content changes:[/bold] {len(content_lines)} file(s) ({added_count} added, {modified_count} modified, {deleted_count} deleted)")
-        for ln in content_lines[:10]:
-            console.print(f"  • {ln}")
-        if len(content_lines) > 10:
-            console.print(f"  ... and {len(content_lines) - 10} more")
+        # 4. Display lists clearly
+        if content_items:
+            console.print(f"\n[bold]Content Changes (public/content):[/bold] {len(content_items)} file(s) ({format_file_size(content_size)})")
+            for it in content_items[:10]:
+                console.print(f"  • [{it['status']}] {it['path']} ({format_file_size(it['size'])})")
+            if len(content_items) > 10:
+                console.print(f"  ... and {len(content_items) - 10} more")
 
-        # 5. Build commit message
-        pending_ops = get_pending_ops()
-        commit_msg = build_commit_message(pending_ops, f"{len(content_lines)} file(s)")
-        console.print(f"\n[bold]Commit message:[/bold] [cyan]{commit_msg}[/cyan]")
+        if other_items:
+            console.print(f"\n[bold]Other Project Changes (code, docs, configs):[/bold] {len(other_items)} file(s) ({format_file_size(other_size)})")
+            for it in other_items[:10]:
+                console.print(f"  • [{it['status']}] {it['path']} ({format_file_size(it['size'])})")
+            if len(other_items) > 10:
+                console.print(f"  ... and {len(other_items) - 10} more")
 
+        if unpushed_commits:
+            console.print(f"\n[bold cyan]Unpushed Local Commits ({len(unpushed_commits)} not yet on GitHub):[/bold cyan]")
+            for c in unpushed_commits[:5]:
+                console.print(f"  • {c}")
+            if len(unpushed_commits) > 5:
+                console.print(f"  ... and {len(unpushed_commits) - 5} more")
+
+        # 5. Decide whether to include other files
+        include_other = False
+        if other_items:
+            if flag_all:
+                include_other = True
+            elif flag_content_only:
+                include_other = False
+            elif not content_items:
+                # Only other files exist
+                if self.auto_yes:
+                    include_other = True
+                else:
+                    ans = questionary.confirm(f"Publish {len(other_items)} changed project file(s)?").ask()
+                    include_other = bool(ans)
+                    if not include_other and not unpushed_commits:
+                        console.print("[yellow]Publish cancelled.[/yellow]")
+                        return False
+            else:
+                # Both content and other files exist
+                if self.auto_yes:
+                    include_other = False
+                else:
+                    snippet_names = [it["path"].split("/")[-1] for it in other_items[:3]]
+                    snippet_str = ", ".join(snippet_names)
+                    if len(other_items) > 3:
+                        snippet_str += ", ..."
+                    choice = questionary.select(
+                        f"Also include {len(other_items)} other changed files ({snippet_str})?",
+                        choices=["Yes, include everything", "No, content only"]
+                    ).ask()
+                    include_other = (choice == "Yes, include everything")
+
+        # 6. Safety Rails Check on items scheduled to be staged
+        to_stage: list[dict[str, Any]] = []
+        if content_items:
+            to_stage.extend(content_items)
+        if include_other:
+            to_stage.extend(other_items)
+
+        forbidden_items = [it for it in to_stage if it.get("is_forbidden")]
+        if forbidden_items:
+            console.print("\n[bold red]Safety Error: Publish blocked by safety rails.[/bold red]")
+            console.print("The following files cannot be committed or deployed:\n")
+            for it in forbidden_items:
+                console.print(f"  • [red]{it['path']}[/red]: {it['forbidden_reason']}")
+            console.print("\n[yellow]Resolution:[/yellow]")
+            console.print("  1. Remove sensitive or temporary files.")
+            console.print("  2. Ensure secret files (.env*) and build directories are listed in .gitignore.")
+            console.print("  3. For large binary files (> 25 MiB), compress or host externally (e.g. Cloudflare R2).\n")
+            return False
+
+        # 7. Code Validation when non-content files are included
+        if include_other and not flag_no_check:
+            ok, check_err = self.run_project_checks(target_dir)
+            if not ok:
+                console.print(f"\n[bold red]Code Validation Failed:[/bold red]\n{check_err}\n")
+                if content_items:
+                    if not self.auto_yes:
+                        offer = questionary.select(
+                            "Non-content build check failed. How would you like to proceed?",
+                            choices=[
+                                "Publish content only (ignore code changes for now)",
+                                "Abort publish (fix code errors first)",
+                            ]
+                        ).ask()
+                        if offer == "Publish content only (ignore code changes for now)":
+                            include_other = False
+                        else:
+                            console.print("[dim]Publish aborted.[/dim]")
+                            return False
+                    else:
+                        console.print("[red]Aborting publish due to build failure.[/red]")
+                        return False
+                else:
+                    console.print("[red]Aborting publish due to build failure.[/red]")
+                    return False
+
+        # 8. Prepare commit messages
+        other_msg = ""
+        if include_other:
+            default_other = generate_other_commit_message(other_items)
+            if self.auto_yes:
+                other_msg = default_other
+            else:
+                other_msg = questionary.text("Commit message for other changes:", default=default_other).ask() or default_other
+
+        content_msg = ""
+        if content_items:
+            pending_ops = get_pending_ops()
+            content_msg = build_commit_message(pending_ops, f"{len(content_items)} file(s)")
+
+        # 9. Dry-run display
         if self.dry_run:
-            console.print("[yellow]Dry-run mode: would commit and push public/content. No changes written.[/yellow]")
+            console.print("\n[bold yellow]═══ Dry-Run Publish Plan (no changes will be written) ═══[/bold yellow]")
+            if include_other:
+                console.print(f"\n[bold]1. Non-Content Commit:[/bold]")
+                console.print(f"   Files: {len(other_items)} ({format_file_size(other_size)})")
+                console.print(f"   Message: [cyan]{other_msg}[/cyan]")
+                check_status = "Skipped (--no-check)" if flag_no_check else "Would run: npm run typecheck && npm run build"
+                console.print(f"   Build Check: {check_status}")
+            if content_items:
+                console.print(f"\n[bold]2. Content Commit:[/bold]")
+                console.print(f"   Files: {len(content_items)} ({format_file_size(content_size)})")
+                console.print(f"   Message: [cyan]{content_msg}[/cyan]")
+            if unpushed_commits:
+                console.print(f"\n[bold]3. Unpushed Commits:[/bold] {len(unpushed_commits)} commit(s) already committed locally")
+            console.print(f"\n[bold]Push Action:[/bold] Would fetch remote, rebase if needed, and push to remote repository.")
+            console.print("[bold yellow]═══════════════════════════════════════════════════════════[/bold yellow]\n")
             return True
 
-        # 6. Confirm
+        # 10. Confirmation before executing
         if not self.auto_yes:
-            if not questionary.confirm("Commit and push to origin/main?").ask():
+            summary_actions = []
+            if include_other: summary_actions.append("non-content commit")
+            if content_items: summary_actions.append("content commit")
+            summary_str = " and ".join(summary_actions) if summary_actions else "push unpushed commits"
+            if not questionary.confirm(f"Proceed with {summary_str} and push to remote?").ask():
                 console.print("[yellow]Publish cancelled by user.[/yellow]")
                 return False
 
-        # 7. Execute git add public/content & git commit
-        try:
-            subprocess.run(["git", "add", "public/content"], cwd=ROOT_DIR, check=True)
-            subprocess.run(["git", "commit", "-m", commit_msg], cwd=ROOT_DIR, check=True)
-            console.print("[green]Committed content changes to local git branch.[/green]")
-        except subprocess.CalledProcessError as e:
-            console.print(f"[bold red]Git commit failed:[/bold red] {e}")
-            return False
+        committed_hashes: list[tuple[str, str]] = []
 
-        # 8. Execute git push
-        try:
-            push_res = subprocess.run(["git", "push"], capture_output=True, text=True, cwd=ROOT_DIR)
-            if push_res.returncode == 0:
-                console.print("[bold green]Pushed to GitHub. Cloudflare Workers will build and deploy in ~1 minute.[/bold green]")
-                console.print("[dim]Remember: free tier includes 3,000 build minutes/month (~1-2 min per publish) and unlimited static requests. Batch your uploads when possible.[/dim]")
+        # 11. Execute Commit 1: non-content changes
+        if include_other:
+            try:
+                for it in other_items:
+                    subprocess.run(["git", "add", it["path"]], cwd=target_dir, check=True)
+                subprocess.run(["git", "commit", "-m", other_msg], cwd=target_dir, check=True)
+                h_res = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=target_dir)
+                committed_hashes.append((h_res.stdout.strip(), other_msg))
+                console.print(f"[green]Committed project changes:[/green] [cyan]{h_res.stdout.strip()}[/cyan] ({other_msg})")
+            except subprocess.CalledProcessError as e:
+                console.print(f"[bold red]Git commit for project changes failed:[/bold red] {e}")
+                return False
+
+        # 12. Execute Commit 2: content changes
+        if content_items:
+            try:
+                subprocess.run(["git", "add", "public/content"], cwd=target_dir, check=True)
+                subprocess.run(["git", "commit", "-m", content_msg], cwd=target_dir, check=True)
+                h_res = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=target_dir)
+                committed_hashes.append((h_res.stdout.strip(), content_msg))
+                console.print(f"[green]Committed content changes:[/green] [cyan]{h_res.stdout.strip()}[/cyan] ({content_msg})")
+            except subprocess.CalledProcessError as e:
+                console.print(f"[bold red]Git commit for content changes failed:[/bold red] {e}")
+                return False
+            clear_pending_ops()
+
+        # 13. Execute Push
+        push_ok, push_err = self.perform_git_push(target_dir)
+        if push_ok:
+            console.print("\n[bold green]Successfully pushed to GitHub![/bold green]")
+            for h, msg in committed_hashes:
+                url = get_github_commit_url(target_dir, h)
+                if url:
+                    console.print(f"  • Commit [cyan]{h}[/cyan] ({msg}): [underline]{url}[/underline]")
+                else:
+                    console.print(f"  • Commit [cyan]{h}[/cyan] ({msg})")
+
+            if not committed_hashes and unpushed_commits:
+                head_h = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=target_dir).stdout.strip()
+                url = get_github_commit_url(target_dir, head_h)
+                if url:
+                    console.print(f"  • Pushed HEAD [cyan]{head_h}[/cyan]: [underline]{url}[/underline]")
+                else:
+                    console.print(f"  • Pushed HEAD [cyan]{head_h}[/cyan]")
+
+            console.print("\n[bold cyan]Cloudflare Deployment:[/bold cyan]")
+            console.print("  Cloudflare Workers will build and deploy automatically.")
+            console.print("  Watch live build progress: [bold]Workers & Pages -> Your Project -> Deployments[/bold]")
+            console.print("  Free Workers Builds: 3,000 build minutes/month (~1-2 min per publish).\n")
+            return True
+        else:
+            if push_err and "conflict occurred" in str(push_err).lower():
+                console.print(f"\n[bold red]Push Blocked:[/bold red]\n{push_err}\n")
+                return False
+            elif committed_hashes:
+                console.print(f"\n[bold yellow]Push Status:[/bold yellow] Changes are safely committed locally, but could not be pushed:\n{push_err}\n")
+                console.print("When network or remote is ready, run: [bold]git push[/bold] or [bold]python ingest.py publish[/bold]")
+                return True
             else:
-                console.print(f"[yellow]Warning: 'git push' failed ({push_res.stderr.strip() or push_res.stdout.strip()}). Changes are committed locally. Run 'git push' manually when network/remote is ready.[/yellow]")
-        except Exception as e:
-            console.print(f"[yellow]Warning: 'git push' failed: {e}. Changes are committed locally.[/yellow]")
-
-        # 9. Clear operations log
-        clear_pending_ops()
-        return True
+                console.print(f"\n[bold yellow]Push Status:[/bold yellow] Could not push unpushed commits:\n{push_err}\n")
+                return False
 
     def action_stats(self) -> None:
         """Scans storage and reports file count, sizes, and Cloudflare limit consumption."""
@@ -2087,6 +2502,9 @@ def main() -> None:
     parser.add_argument("--module", default=None, help="Target module slug for verify")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without writing")
     parser.add_argument("--yes", action="store_true", help="Auto-confirm non-destructive prompts")
+    parser.add_argument("--all", action="store_true", dest="include_all", help="Publish all pending changes (content + code/docs) without asking")
+    parser.add_argument("--content-only", action="store_true", help="Publish only public/content without asking")
+    parser.add_argument("--no-check", action="store_true", help="Skip npm run typecheck and npm run build before committing non-content files")
     parser.add_argument("--verbose", action="store_true", help="Verbose log output")
 
     args = parser.parse_args()
@@ -2117,7 +2535,15 @@ def main() -> None:
 
     # Initialize storage
     storage = get_storage(args.target, args.root)
-    cli = IngestCLI(storage, target=args.target, dry_run=args.dry_run, auto_yes=args.yes)
+    cli = IngestCLI(
+        storage,
+        target=args.target,
+        dry_run=args.dry_run,
+        auto_yes=args.yes,
+        include_all=args.include_all,
+        content_only=args.content_only,
+        no_check=args.no_check,
+    )
 
     if args.subcommand == "publish":
         cli.action_publish()

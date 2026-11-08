@@ -39,7 +39,7 @@ The portal architecture is decoupled into three simple components:
 
 1. **The Ingest Tool on your computer** (`python ingest.py`): An interactive, multi-agent Python CLI that guides you to add files **one item at a time**. It validates formats, compresses photos to WebP with thumbnails, updates manifests, and keeps search indices in sync.
 2. **Built-in Content Directory** (`public/content/`): Content lives directly inside your repository under `public/content/`. Vite serves it locally during development at `/content`, and copies it into `dist/content` on production builds.
-3. **Cloudflare Workers Static Assets Website**: When you run `python ingest.py publish`, the tool commits only `public/content/` to Git and pushes to GitHub. Cloudflare automatically detects the push, runs `npm run build` and `npx wrangler deploy`, and updates your live site in ~1 minute.
+3. **Cloudflare Workers Static Assets Website**: When you run `python ingest.py publish`, the tool detects both content files (`public/content/`) and any other changed project files (docs, README, code), stages them in two clean commits (`chore: ...` followed by `content: ...`), and pushes in a single `git push`. Cloudflare automatically detects the push, runs `npm run build` and `npx wrangler deploy`, and updates your live site in ~1 minute with just ONE build.
 
 ---
 
@@ -406,33 +406,56 @@ Successfully merged 3 questions into Day 1!
 
 ---
 
-### Step 8: Publish to Cloudflare Workers
+### Step 8: Publish to Cloudflare Workers (Unified Push)
 When prompted after your ingest:
 ```
 ? What next?
   > Publish now (git push to Cloudflare Workers)
 ```
+The publish command automatically detects both your new curriculum content and any other project edits (documentation, code updates, README). It displays both lists with file counts and sizes, and prompts whether to include non-content changes:
+
 *Actual Terminal Output:*
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Publish Content to Cloudflare Workers Static Assets                         │
+│ Publish Content & Project Changes to Cloudflare Workers                     │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-Pending content changes: 8 file(s) (8 added, 0 modified, 0 deleted)
-  • ?? public/content/modules/mlops-associate/days/day-01/day.json
-  • ?? public/content/modules/mlops-associate/days/day-01/summary.docx
-  • ?? public/content/modules/mlops-associate/days/day-01/transcripts/01-morning-lecture.docx
-  • ?? public/content/modules/mlops-associate/days/day-01/transcripts/02-afternoon-walkthrough.docx
-  • ?? public/content/modules/mlops-associate/manifest.json
-  • ?? public/content/modules/mlops-associate/visuals.json
-  • ?? public/content/index.json
-  • ?? public/content/search-index.json
+Pending content changes: 8 file(s) (8 added, 0 modified, 0 deleted) ~ 182.4 KB
+  • ?? public/content/modules/mlops-associate/days/day-01/day.json (2.1 KB)
+  • ?? public/content/modules/mlops-associate/days/day-01/summary.docx (148.2 KB)
+  • ?? public/content/modules/mlops-associate/days/day-01/transcripts/01-morning-lecture.docx (18.4 KB)
+  • ?? public/content/modules/mlops-associate/days/day-01/transcripts/02-afternoon-walkthrough.docx (12.1 KB)
+  • ?? public/content/modules/mlops-associate/manifest.json (1.1 KB)
+  • ?? public/content/modules/mlops-associate/visuals.json (240 B)
+  • ?? public/content/index.json (180 B)
+  • ?? public/content/search-index.json (180 B)
 
-Commit message: content: create module 'mlops-associate', create Day 1, and 4 more (6 items)
+Other changed project files: 2 file(s) ~ 4.2 KB
+  • M  HOW_TO_USE.md (3.8 KB)
+  • M  README.md (410 B)
+
+? Also include 2 other changed files (HOW_TO_USE.md, README.md)?
+  ❯ Yes, include everything (1 push, 1 build)
+    No, content only
+
+Running project verification checks (typecheck & build)...
+✓ Type check and build passed cleanly.
+
+? Non-content commit message: chore: update HOW_TO_USE.md, README.md
+? Content commit message: content: create module 'mlops-associate', create Day 1, and 4 more (6 items)
 ? Commit and push to origin/main? Yes
 
-Committed content changes to local git branch.
-Pushed to GitHub. Cloudflare Workers will build and deploy in ~1 minute.
+Fetching remote to check status...
+[main 1a2b3c4] chore: update HOW_TO_USE.md, README.md
+ 2 files changed, 25 insertions(+), 10 deletions(-)
+[main 5d6e7f8] content: create module 'mlops-associate', create Day 1, and 4 more (6 items)
+ 8 files changed, 142 insertions(+)
+ create mode 100644 public/content/modules/mlops-associate/days/day-01/day.json
+ ...
+
+Pushed 2 commits to GitHub (origin/main).
+Commit URL: https://github.com/Drylegend/ai13_transcripts/commit/5d6e7f8
+Cloudflare Workers will build and deploy in ~1 minute.
 Remember: free tier includes 3,000 build minutes/month (~1-2 min per publish) and unlimited static requests. Batch your uploads when possible.
 ```
 
@@ -546,10 +569,12 @@ Keep this quick 5-minute routine after every class session:
   - Add external resources: `add link`.
   - Add questions: `add questions-set`.
   - Choose `Add another item` between files to keep working in one session.
-- [ ] **Step 4 — Publish once**:
+- [ ] **Step 4 — Publish once (Unified Push)**:
   - Select `Publish now (git push to Cloudflare Workers)`.
-  - Review the list of staged changes.
-  - Confirm `[Y]`.
+  - Review both pending content and any other changed project files (docs, configs, code).
+  - Choose whether to include other files (`Yes, include everything` or `No, content only`).
+  - If code files are included, the tool automatically verifies types and build.
+  - Confirm the commit messages and push (`[Y]`). Everything goes live in a single Cloudflare build!
 - [ ] **Step 5 — Check the live site**:
   - Open your live `.workers.dev` URL after ~1 minute.
   - Confirm the new Day appears with tabs, viewers, and questions active.
@@ -616,6 +641,46 @@ Inspect all modules, days, labs, and pending publish count:
 python ingest.py list
 ```
 
+### H. The Unified Publish Workflow & Safety Rails
+When you run `python ingest.py publish`, the tool inspects `git status --porcelain` and divides pending changes into two clear groups:
+1. **Content**: Files inside `public/content/` (modules, days, transcripts, summaries, photos, JSON manifests, search index).
+2. **Other**: Any modified or untracked project files outside `public/content/` (e.g., `README.md`, `HOW_TO_USE.md`, `src/`, configs).
+
+#### Interactive Selection & Two-Commit Sequence
+If non-content files are detected, the tool displays counts, filenames, and sizes for both groups, then asks:
+```
+? Also include 2 other changed files (HOW_TO_USE.md, README.md)?
+  ❯ Yes, include everything (1 push, 1 build)
+    No, content only
+```
+When you choose **Yes, include everything**:
+1. The tool creates a **non-content commit first** (e.g. `chore: update HOW_TO_USE.md, README.md`). You can press Enter to accept the auto-generated message or edit it.
+2. The tool creates the **content commit second** (e.g. `content: create module 'mlops-associate' (6 items)`).
+3. The tool executes **one single `git push`**. Cloudflare detects the push and runs just **one build** for both your code/documentation updates and your new content!
+
+#### Command-Line Flags
+You can skip prompts in scripts or automated workflows using these flags:
+- `python ingest.py publish --all`: Automatically stages both content and non-content files without asking.
+- `python ingest.py publish --content-only`: Publishes only `public/content/` files, leaving other working directory edits untouched.
+- `python ingest.py publish --no-check`: Skips the automatic `npm run typecheck && npm run build` verification step.
+- `python ingest.py publish --dry-run`: Previews the complete publish plan (partitioned file lists, proposed commit messages, and verification check status) without staging, committing, or pushing anything.
+
+#### Safety Rails
+The publish command enforces strict security and stability boundaries:
+- **Refused Files**: The tool strictly refuses to stage `.env*` files, `.staging/`, `.ingest_backups/`, `.ingest_logs/`, `node_modules/`, `dist/`, or any file larger than **25 MiB** (Cloudflare's maximum static asset limit). If any forbidden file is detected in the staging candidate list, publish stops immediately and prints a clear explanation.
+- **Pre-Commit Code Verification**: Whenever non-content changes (like TypeScript, React components, or Vite configs) are included, the tool automatically runs `npm run typecheck` and `npm run build` **before committing**. If errors occur:
+  - The build errors are printed directly to your terminal.
+  - Publish stops before creating any git commits.
+  - The CLI asks: `? Publish only content files instead?` so your course content is never blocked by broken frontend experiments.
+- **Push & Rebase Recovery**:
+  - The tool runs `git fetch` before pushing to ensure you have the latest remote commits.
+  - If your local branch is behind, it automatically runs `git pull --rebase` to integrate remote changes cleanly.
+  - If a rebase conflict occurs, it cleanly runs `git rebase --abort` to restore your working tree, prints the conflicting files, and provides step-by-step instructions.
+  - It **never force pushes** (`git push --force` is strictly forbidden).
+- **Unpushed Commits Detection**:
+  - Even if your working tree has no uncommitted changes, running `python ingest.py publish` checks if you have existing local commits that have not been pushed to GitHub.
+  - Instead of saying "Nothing to publish", it shows `Found N unpushed commit(s) not yet on GitHub`, asks for confirmation, and pushes them safely.
+
 ---
 
 ## 11. Practice Safely: Dry-Run and Local Sandbox
@@ -629,7 +694,11 @@ python ingest.py undo --dry-run
 ```
 *Example Dry-Run Output:*
 ```
-Dry-run mode: would commit and push public/content. No changes written.
+DRY RUN: No commits or pushes will be performed.
+Would stage non-content commit: chore: update HOW_TO_USE.md (1 file)
+Would stage content commit: content: create module 'mlops-associate' (6 items)
+Would verify checks: npm run typecheck && npm run build
+Would push to: origin/main
 ```
 
 ### Option 2: Local Sandbox (`--target local`)
@@ -733,13 +802,15 @@ python ingest.py stats
 | **Build runs but Cloudflare changes my project settings** | Missing or uncommitted `wrangler.jsonc` | Ensure `wrangler.jsonc` is committed in the root of your Git repository so Cloudflare honors your configuration. |
 | **Cloudflare Workers build fails** | Old Node.js version used in build container | Verify `.node-version` file exists in repo root and contains `22`. Ensure Build command is `npm run build`. |
 | **Content not showing after publish** | Build still in progress or stale browser cache | 1. Check Cloudflare dashboard deployments tab.<br>2. Hard refresh your browser (`Ctrl + F5` or `Cmd + Shift + R`). |
-| **"Nothing to publish"** | No uncommitted changes in `public/content/` | You have already published all current content. Ingest new items before publishing. |
+| **"Nothing to publish"** | No uncommitted changes in `public/content/` or other files, and all commits are pushed | You have already published all current work. Ingest new items or make edits before publishing. |
+| **Git push rejected / rebase conflict** | Remote branch on GitHub has newer commits that conflict | The tool automatically attempts `git pull --rebase`. If there is a merge conflict, it safely aborts (`git rebase --abort`). Resolve conflicts manually: run `git pull`, edit conflicting files, run `python ingest.py rebuild-index`, then run `python ingest.py publish`. |
+| **Build check failed before publish** | Non-content code or config changes caused TypeScript or Vite build errors | The tool stops before committing. Inspect the build error output, fix the code errors in `src/`, or choose **No, content only** (or run `python ingest.py publish --content-only`) to publish content immediately without publishing broken code. |
+| **Publish refused: safety rail blocked file** | Attempted to stage `.env*`, `.staging/`, or a file > 25 MiB | The tool strictly blocks secret files and oversized files. Move `.env` files out of staging or add to `.gitignore`. For files > 25 MiB, compress them or host externally. |
 | **Git push rejected / auth failed** | Terminal not authenticated with GitHub | Run `gh auth login` or generate a GitHub Personal Access Token with `repo` scope. |
 | **File rejected: "Cloudflare limit is 25 MiB"** | File exceeds single-file limit | Compress the document or image. For video or large datasets, host externally and add as a Link. |
 | **Blank module or missing days** | Manifests out of sync | Run `python ingest.py rebuild-index` followed by `python ingest.py publish`. |
 | **Deep link gives 404 on refresh** | SPA fallback not catching the path | Ensure `wrangler.jsonc` has `"not_found_handling": "single-page-application"` and output directory is `dist`. |
 | **Accidentally published wrong file** | Human error during upload | Run `python ingest.py remove` to remove the wrong item, re-upload the correct one, and run `python ingest.py publish`. |
-| **Merge conflict on public/content** | Multiple people pushed to `main` simultaneously | Run `git pull origin main --rebase`, resolve conflicts on JSON manifests, run `python ingest.py rebuild-index`, then push. |
 
 ---
 
@@ -796,8 +867,14 @@ Because the folder layout is **identical**, copy all folders from `public/conten
 # 1. Launch interactive content wizard (Default: site mode)
 python ingest.py
 
-# 2. Publish uncommitted content to Cloudflare Workers
+# 2. Publish uncommitted content & project changes to Cloudflare Workers
 python ingest.py publish
+
+# Publish everything (content + other changed files) without interactive prompt
+python ingest.py publish --all
+
+# Publish only content files, leaving other working directory edits untouched
+python ingest.py publish --content-only
 
 # 3. Check storage statistics, file count & free-tier limits
 python ingest.py stats
@@ -824,6 +901,9 @@ python ingest.py undo
 ### Helpful Command Flags
 | Flag | Example | Description |
 |---|---|---|
+| `--all` | `python ingest.py publish --all` | Automatically stage and publish both content and non-content project changes. |
+| `--content-only` | `python ingest.py publish --content-only` | Publish only `public/content/` files, never staging or prompting for other files. |
+| `--no-check` | `python ingest.py publish --no-check` | Skip automatic `npm run typecheck && npm run build` verification on code changes. |
 | `--dry-run` | `python ingest.py publish --dry-run` | Preview actions without writing to disk or Git. |
 | `--target local` | `python ingest.py --target local` | Use isolated `./dev-content/` practice sandbox. |
 | `--target r2` | `python ingest.py --target r2` | Connect to Cloudflare R2 bucket. |
