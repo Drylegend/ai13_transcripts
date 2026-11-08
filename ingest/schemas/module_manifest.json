@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "default": "1",
+      "type": "string"
+    },
+    "updatedAt": {
+      "type": "string"
+    },
+    "slug": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "subtitle": {
+      "default": "",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "type": "string"
+    },
+    "courseCode": {
+      "type": "string"
+    },
+    "days": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string"
+          },
+          "subtitle": {
+            "default": "",
+            "type": "string"
+          },
+          "hasSummary": {
+            "default": false,
+            "type": "boolean"
+          },
+          "transcriptCount": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "linkCount": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "boardCount": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "questionCount": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "subtitle",
+          "hasSummary",
+          "transcriptCount",
+          "linkCount",
+          "boardCount",
+          "questionCount"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "labs": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "category": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "hasNotes": {
+            "default": false,
+            "type": "boolean"
+          },
+          "hasDoodle": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "category",
+          "title",
+          "hasNotes",
+          "hasDoodle"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "labCategories": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "version",
+    "updatedAt",
+    "slug",
+    "title",
+    "subtitle",
+    "description",
+    "days",
+    "labs",
+    "labCategories"
+  ],
+  "additionalProperties": false
+}

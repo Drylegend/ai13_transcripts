@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.staging
+.staging
+.end.development
+
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Ingest CLI logs and backups
+.ingest_logs/
+.ingest_backups/
+.staging/
+dev-content/
+!dev-content/.gitkeep
+.sample-content/
+mock-content/
+
+# Content folder (large source files, gitignored)
+content/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+.idea/
+.vscode/
+
+.node-version

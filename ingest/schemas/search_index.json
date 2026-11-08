@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "enum": [
+          "module",
+          "day",
+          "lab",
+          "question"
+        ]
+      },
+      "moduleSlug": {
+        "type": "string"
+      },
+      "dayNumber": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "labId": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "snippet": {
+        "type": "string"
+      },
+      "tags": {
+        "default": [],
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "type",
+      "moduleSlug",
+      "title",
+      "snippet",
+      "tags"
+    ],
+    "additionalProperties": false
+  }
+}

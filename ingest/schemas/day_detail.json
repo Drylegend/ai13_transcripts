@@ -1,0 +1,316 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "number": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "title": {
+      "type": "string"
+    },
+    "subtitle": {
+      "default": "",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "type": "string"
+    },
+    "recap": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "docx",
+            "md",
+            "html",
+            "pdf",
+            "ipynb",
+            "webp",
+            "png",
+            "jpg",
+            "svg"
+          ]
+        },
+        "sizeBytes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "hash": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "sizeBytes",
+        "hash",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "transcripts": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string"
+          },
+          "file": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "docx",
+                  "md",
+                  "html",
+                  "pdf",
+                  "ipynb",
+                  "webp",
+                  "png",
+                  "jpg",
+                  "svg"
+                ]
+              },
+              "sizeBytes": {
+                "type": "number",
+                "minimum": 0
+              },
+              "hash": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "format",
+              "sizeBytes",
+              "hash",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "order",
+          "title",
+          "file"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "links": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "boards": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "image": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "docx",
+                  "md",
+                  "html",
+                  "pdf",
+                  "ipynb",
+                  "webp",
+                  "png",
+                  "jpg",
+                  "svg"
+                ]
+              },
+              "sizeBytes": {
+                "type": "number",
+                "minimum": 0
+              },
+              "hash": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "format",
+              "sizeBytes",
+              "hash",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "thumb": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "docx",
+                  "md",
+                  "html",
+                  "pdf",
+                  "ipynb",
+                  "webp",
+                  "png",
+                  "jpg",
+                  "svg"
+                ]
+              },
+              "sizeBytes": {
+                "type": "number",
+                "minimum": 0
+              },
+              "hash": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "format",
+              "sizeBytes",
+              "hash",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "image",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "questions": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "answer",
+          "explanation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "updatedAt": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "number",
+    "title",
+    "subtitle",
+    "description",
+    "transcripts",
+    "links",
+    "boards",
+    "questions",
+    "updatedAt"
+  ],
+  "additionalProperties": false
+}
