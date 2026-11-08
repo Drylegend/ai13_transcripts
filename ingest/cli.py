@@ -136,6 +136,7 @@ class IngestCLI:
         self.target = target
         self.dry_run = dry_run
         self.auto_yes = auto_yes
+        Agent1Normalize.clean_all_staging()
         self.agent1 = Agent1Normalize()
         self.agent2 = Agent2Placement(storage)
         self.agent3 = Agent3Numbering(storage)
@@ -627,61 +628,59 @@ class IngestCLI:
         day_number: Optional[int] = None,
         file_path_override: Optional[str] = None,
     ) -> None:
-        console.print(Panel("[bold]Add or Replace Day Summary[/bold]", style="cyan"))
-        slug = module_slug or self.select_module()
-        if not slug: return
-        day_num = day_number if day_number is not None else self.select_day(slug)
-        if day_num is None: return
-
-        # Single file picker
-        file_path = file_path_override or pick_single_file("Select Day Summary (.docx, .md, .html, .pdf)")
-        staged = self.agent1.process(file_path)
-
-        dest_key = Agent2Placement.summary_key(slug, day_num, staged.format)
-        overwrite_info = self.agent2.check_overwrite(dest_key)
-
-        console.print("\n[bold]Plan:[/bold]")
-        if overwrite_info:
-            console.print(f"  [yellow]OVERWRITE:[/yellow] [cyan]{dest_key}[/cyan] (Existing: {overwrite_info['size']} bytes -> New: {staged.size_bytes} bytes)")
-        else:
-            console.print(f"  [green]UPLOAD:[/green] [cyan]{dest_key}[/cyan] ({staged.size_bytes} bytes, hash: {staged.sha256_short})")
-
-        # Check duplicate
-        dup = self.agent3.check_duplicate_hash(slug, staged.sha256_short, exclude_key=dest_key)
-        if dup:
-            console.print(f"[bold yellow]Warning: Content hash matches {dup}![/bold yellow]")
-            if not questionary.confirm("This file appears identical to existing content. Proceed anyway?").ask():
-                return
-
-        if overwrite_info:
-            console.print(f"[bold yellow]File already exists on storage ({dest_key}).[/bold yellow]")
-            if not questionary.confirm("Are you sure you want to OVERWRITE this existing file?").ask():
-                self.agent1.cleanup()
-                return
-        elif not self.auto_yes and not questionary.confirm("Upload summary?").ask():
-            self.agent1.cleanup()
-            return
-
-        if self.dry_run:
-            self.agent1.cleanup()
-            console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
-            return
-
-        # Backup & Write
-        backup_dir = self.agent2.create_backup_dir()
-        folder = Agent2Placement.day_folder(day_num)
-        day_key = f"modules/{slug}/days/{folder}/day.json"
-        b_day = self.agent2.backup_json_file(day_key, backup_dir)
-        b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
-
-        change_set = ChangeSet(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            operation="add_summary",
-            module_slug=slug,
-            backup_files={k: str(v) for k, v in [(day_key, b_day), (f"modules/{slug}/manifest.json", b_man)] if v},
-        )
-
+        self.agent1.new_run()
         try:
+            console.print(Panel("[bold]Add or Replace Day Summary[/bold]", style="cyan"))
+            slug = module_slug or self.select_module()
+            if not slug: return
+            day_num = day_number if day_number is not None else self.select_day(slug)
+            if day_num is None: return
+
+            # Single file picker
+            file_path = file_path_override or pick_single_file("Select Day Summary (.docx, .md, .html, .pdf)")
+            staged = self.agent1.process(file_path)
+
+            dest_key = Agent2Placement.summary_key(slug, day_num, staged.format)
+            overwrite_info = self.agent2.check_overwrite(dest_key)
+
+            console.print("\n[bold]Plan:[/bold]")
+            if overwrite_info:
+                console.print(f"  [yellow]OVERWRITE:[/yellow] [cyan]{dest_key}[/cyan] (Existing: {overwrite_info['size']} bytes -> New: {staged.size_bytes} bytes)")
+            else:
+                console.print(f"  [green]UPLOAD:[/green] [cyan]{dest_key}[/cyan] ({staged.size_bytes} bytes, hash: {staged.sha256_short})")
+
+            # Check duplicate
+            dup = self.agent3.check_duplicate_hash(slug, staged.sha256_short, exclude_key=dest_key)
+            if dup:
+                console.print(f"[bold yellow]Warning: Content hash matches {dup}![/bold yellow]")
+                if not questionary.confirm("This file appears identical to existing content. Proceed anyway?").ask():
+                    return
+
+            if overwrite_info:
+                console.print(f"[bold yellow]File already exists on storage ({dest_key}).[/bold yellow]")
+                if not questionary.confirm("Are you sure you want to OVERWRITE this existing file?").ask():
+                    return
+            elif not self.auto_yes and not questionary.confirm("Upload summary?").ask():
+                return
+
+            if self.dry_run:
+                console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
+                return
+
+            # Backup & Write
+            backup_dir = self.agent2.create_backup_dir()
+            folder = Agent2Placement.day_folder(day_num)
+            day_key = f"modules/{slug}/days/{folder}/day.json"
+            b_day = self.agent2.backup_json_file(day_key, backup_dir)
+            b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
+
+            change_set = ChangeSet(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                operation="add_summary",
+                module_slug=slug,
+                backup_files={k: str(v) for k, v in [(day_key, b_day), (f"modules/{slug}/manifest.json", b_man)] if v},
+            )
+
             self.storage.put_file(dest_key, staged.staged_file, get_content_type(dest_key), cache="immutable")
             change_set.uploaded_keys.append(dest_key)
             (backup_dir / "__changeset__.json").write_text(
@@ -722,67 +721,78 @@ class IngestCLI:
         finally:
             self.agent1.cleanup()
 
-    def action_add_transcript(self) -> None:
-        console.print(Panel("[bold]Add a Transcript[/bold]", style="cyan"))
-        slug = self.select_module()
-        if not slug: return
-        day_num = self.select_day(slug)
-        if day_num is None: return
-
-        proposed_order = self.agent3.get_next_transcript_order(slug, day_num)
-        order_str = questionary.text("Transcript Order:", default=str(proposed_order)).ask()
-        if not order_str or not order_str.isdigit(): return
-        order = int(order_str)
-
-        title = questionary.text("Transcript Title (e.g. Morning Session):", default=f"Transcript {order}").ask()
-        if not title: return
-
-        file_path = pick_single_file("Select Transcript Document (.docx, .md, .txt)")
-        staged = self.agent1.process(file_path)
-
-        dest_key = Agent2Placement.transcript_key(slug, day_num, order, staged.format)
-        overwrite_info = self.agent2.check_overwrite(dest_key)
-
-        console.print("\n[bold]Plan:[/bold]")
-        if overwrite_info:
-            console.print(f"  [yellow]OVERWRITE:[/yellow] [cyan]{dest_key}[/cyan] ({overwrite_info['size']} B -> {staged.size_bytes} B)")
-        else:
-            console.print(f"  [green]UPLOAD:[/green] [cyan]{dest_key}[/cyan] ({staged.size_bytes} bytes, hash: {staged.sha256_short})")
-
-        dup = self.agent3.check_duplicate_hash(slug, staged.sha256_short, exclude_key=dest_key)
-        if dup:
-            console.print(f"[bold yellow]Warning: Content hash matches {dup}![/bold yellow]")
-            if not questionary.confirm("This file appears identical to existing content. Proceed anyway?").ask():
-                return
-
-        if overwrite_info:
-            console.print(f"[bold yellow]File already exists on storage ({dest_key}).[/bold yellow]")
-            if not questionary.confirm("Are you sure you want to OVERWRITE this existing transcript?").ask():
-                self.agent1.cleanup()
-                return
-        elif not self.auto_yes and not questionary.confirm("Upload transcript?").ask():
-            self.agent1.cleanup()
-            return
-
-        if self.dry_run:
-            self.agent1.cleanup()
-            console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
-            return
-
-        backup_dir = self.agent2.create_backup_dir()
-        folder = Agent2Placement.day_folder(day_num)
-        day_key = f"modules/{slug}/days/{folder}/day.json"
-        b_day = self.agent2.backup_json_file(day_key, backup_dir)
-        b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
-
-        change_set = ChangeSet(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            operation="add_transcript",
-            module_slug=slug,
-            backup_files={k: str(v) for k, v in [(day_key, b_day), (f"modules/{slug}/manifest.json", b_man)] if v},
-        )
-
+    def action_add_transcript(
+        self,
+        module_slug: Optional[str] = None,
+        day_number: Optional[int] = None,
+        order: Optional[int] = None,
+        title: Optional[str] = None,
+        file_path_override: Optional[str] = None,
+    ) -> None:
+        self.agent1.new_run()
         try:
+            console.print(Panel("[bold]Add a Transcript[/bold]", style="cyan"))
+            slug = module_slug or self.select_module()
+            if not slug: return
+            day_num = day_number if day_number is not None else self.select_day(slug)
+            if day_num is None: return
+
+            if order is None:
+                proposed_order = self.agent3.get_next_transcript_order(slug, day_num)
+                order_str = questionary.text("Transcript Order:", default=str(proposed_order)).ask()
+                if not order_str or not order_str.isdigit(): return
+                order_val = int(order_str)
+            else:
+                order_val = order
+
+            if title is None:
+                t_title = questionary.text("Transcript Title (e.g. Morning Session):", default=f"Transcript {order_val}").ask()
+                if not t_title: return
+            else:
+                t_title = title
+
+            file_path = file_path_override or pick_single_file("Select Transcript Document (.docx, .md, .txt)")
+            staged = self.agent1.process(file_path)
+
+            dest_key = Agent2Placement.transcript_key(slug, day_num, order_val, staged.format)
+            overwrite_info = self.agent2.check_overwrite(dest_key)
+
+            console.print("\n[bold]Plan:[/bold]")
+            if overwrite_info:
+                console.print(f"  [yellow]OVERWRITE:[/yellow] [cyan]{dest_key}[/cyan] ({overwrite_info['size']} B -> {staged.size_bytes} B)")
+            else:
+                console.print(f"  [green]UPLOAD:[/green] [cyan]{dest_key}[/cyan] ({staged.size_bytes} bytes, hash: {staged.sha256_short})")
+
+            dup = self.agent3.check_duplicate_hash(slug, staged.sha256_short, exclude_key=dest_key)
+            if dup:
+                console.print(f"[bold yellow]Warning: Content hash matches {dup}![/bold yellow]")
+                if not questionary.confirm("This file appears identical to existing content. Proceed anyway?").ask():
+                    return
+
+            if overwrite_info:
+                console.print(f"[bold yellow]File already exists on storage ({dest_key}).[/bold yellow]")
+                if not questionary.confirm("Are you sure you want to OVERWRITE this existing transcript?").ask():
+                    return
+            elif not self.auto_yes and not questionary.confirm("Upload transcript?").ask():
+                return
+
+            if self.dry_run:
+                console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
+                return
+
+            backup_dir = self.agent2.create_backup_dir()
+            folder = Agent2Placement.day_folder(day_num)
+            day_key = f"modules/{slug}/days/{folder}/day.json"
+            b_day = self.agent2.backup_json_file(day_key, backup_dir)
+            b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
+
+            change_set = ChangeSet(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                operation="add_transcript",
+                module_slug=slug,
+                backup_files={k: str(v) for k, v in [(day_key, b_day), (f"modules/{slug}/manifest.json", b_man)] if v},
+            )
+
             self.storage.put_file(dest_key, staged.staged_file, get_content_type(dest_key), cache="immutable")
             change_set.uploaded_keys.append(dest_key)
             (backup_dir / "__changeset__.json").write_text(
@@ -797,9 +807,9 @@ class IngestCLI:
             transcripts = day_json.get("transcripts", [])
             # Replace existing order or append
             t_item = {
-                "id": f"t-{order}",
-                "order": order,
-                "title": title,
+                "id": f"t-{order_val}",
+                "order": order_val,
+                "title": t_title,
                 "file": {
                     "path": dest_key,
                     "format": staged.format,
@@ -808,7 +818,7 @@ class IngestCLI:
                     "updatedAt": staged.updated_at,
                 },
             }
-            existing_idx = next((i for i, t in enumerate(transcripts) if t.get("order") == order), None)
+            existing_idx = next((i for i, t in enumerate(transcripts) if t.get("order") == order_val), None)
             if existing_idx is not None:
                 transcripts[existing_idx] = t_item
             else:
@@ -829,61 +839,69 @@ class IngestCLI:
                     self.agent4.rollback(change_set)
                     return
 
-            log_pending_op(f"add transcript '{title}' to Day {day_num}")
-            console.print(f"[bold green]Transcript {order} ('{title}') successfully added to Day {day_num}![/bold green]")
+            log_pending_op(f"add transcript '{t_title}' to Day {day_num}")
+            console.print(f"[bold green]Transcript {order_val} ('{t_title}') successfully added to Day {day_num}![/bold green]")
         finally:
             self.agent1.cleanup()
 
-    def action_add_board_photo(self) -> None:
-        console.print(Panel("[bold]Add Class Board Photo[/bold]", style="cyan"))
-        slug = self.select_module()
-        if not slug: return
-        day_num = self.select_day(slug)
-        if day_num is None: return
+    def action_add_board_photo(
+        self,
+        module_slug: Optional[str] = None,
+        day_number: Optional[int] = None,
+        caption: Optional[str] = None,
+        file_path_override: Optional[str] = None,
+    ) -> None:
+        self.agent1.new_run()
+        try:
+            console.print(Panel("[bold]Add Class Board Photo[/bold]", style="cyan"))
+            slug = module_slug or self.select_module()
+            if not slug: return
+            day_num = day_number if day_number is not None else self.select_day(slug)
+            if day_num is None: return
 
-        proposed_idx = self.agent3.get_next_board_number(slug, day_num)
-        caption = questionary.text("Board Photo Caption / Topic:", default=f"Board Work {proposed_idx}").ask() or ""
+            proposed_idx = self.agent3.get_next_board_number(slug, day_num)
+            if caption is None:
+                b_caption = questionary.text("Board Photo Caption / Topic:", default=f"Board Work {proposed_idx}").ask() or ""
+            else:
+                b_caption = caption
 
-        file_path = pick_single_file("Select Board Photo (JPG, PNG, WebP, HEIC)")
-        staged = self.agent1.process(file_path)
+            file_path = file_path_override or pick_single_file("Select Board Photo (JPG, PNG, WebP, HEIC)")
+            staged = self.agent1.process(file_path)
 
-        dest_img_key = Agent2Placement.board_key(slug, day_num, proposed_idx, is_thumb=False)
-        dest_thumb_key = Agent2Placement.board_key(slug, day_num, proposed_idx, is_thumb=True)
+            dest_img_key = Agent2Placement.board_key(slug, day_num, proposed_idx, is_thumb=False)
+            dest_thumb_key = Agent2Placement.board_key(slug, day_num, proposed_idx, is_thumb=True)
 
-        console.print("\n[bold]Plan:[/bold]")
-        console.print(f"  • Full image (WebP): [cyan]{dest_img_key}[/cyan] ({staged.width}x{staged.height}, {staged.size_bytes} B, EXIF stripped)")
-        console.print(f"  • Thumbnail (WebP):  [cyan]{dest_thumb_key}[/cyan] ({staged.thumb_width}x{staged.thumb_height})")
+            console.print("\n[bold]Plan:[/bold]")
+            console.print(f"  • Full image (WebP): [cyan]{dest_img_key}[/cyan] ({staged.width}x{staged.height}, {staged.size_bytes} B, EXIF stripped)")
+            console.print(f"  • Thumbnail (WebP):  [cyan]{dest_thumb_key}[/cyan] ({staged.thumb_width}x{staged.thumb_height})")
 
-        dup = self.agent3.check_duplicate_hash(slug, staged.sha256_short)
-        if dup:
-            console.print(f"[bold yellow]Warning: Image content hash matches {dup}![/bold yellow]")
-            if not questionary.confirm("This photo appears identical to existing content. Proceed anyway?").ask():
+            dup = self.agent3.check_duplicate_hash(slug, staged.sha256_short)
+            if dup:
+                console.print(f"[bold yellow]Warning: Image content hash matches {dup}![/bold yellow]")
+                if not questionary.confirm("This photo appears identical to existing content. Proceed anyway?").ask():
+                    return
+
+            if not self.auto_yes and not questionary.confirm("Upload board photo?").ask():
                 return
 
-        if not self.auto_yes and not questionary.confirm("Upload board photo?").ask():
-            self.agent1.cleanup()
-            return
+            if self.dry_run:
+                console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
+                return
 
-        if self.dry_run:
-            self.agent1.cleanup()
-            console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
-            return
+            backup_dir = self.agent2.create_backup_dir()
+            folder = Agent2Placement.day_folder(day_num)
+            day_key = f"modules/{slug}/days/{folder}/day.json"
+            b_day = self.agent2.backup_json_file(day_key, backup_dir)
+            b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
+            b_vis = self.agent2.backup_json_file(f"modules/{slug}/visuals.json", backup_dir)
 
-        backup_dir = self.agent2.create_backup_dir()
-        folder = Agent2Placement.day_folder(day_num)
-        day_key = f"modules/{slug}/days/{folder}/day.json"
-        b_day = self.agent2.backup_json_file(day_key, backup_dir)
-        b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
-        b_vis = self.agent2.backup_json_file(f"modules/{slug}/visuals.json", backup_dir)
+            change_set = ChangeSet(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                operation="add_board_photo",
+                module_slug=slug,
+                backup_files={k: str(v) for k, v in [(day_key, b_day), (f"modules/{slug}/manifest.json", b_man), (f"modules/{slug}/visuals.json", b_vis)] if v},
+            )
 
-        change_set = ChangeSet(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            operation="add_board_photo",
-            module_slug=slug,
-            backup_files={k: str(v) for k, v in [(day_key, b_day), (f"modules/{slug}/manifest.json", b_man), (f"modules/{slug}/visuals.json", b_vis)] if v},
-        )
-
-        try:
             self.storage.put_file(dest_img_key, staged.staged_file, "image/webp", cache="immutable")
             change_set.uploaded_keys.append(dest_img_key)
 
@@ -911,7 +929,7 @@ class IngestCLI:
             boards = day_json.get("boards", [])
             boards.append({
                 "id": f"b-{proposed_idx}",
-                "caption": caption,
+                "caption": b_caption,
                 "width": staged.width or 800,
                 "height": staged.height or 450,
                 "image": {
@@ -943,51 +961,70 @@ class IngestCLI:
         finally:
             self.agent1.cleanup()
 
-    def action_add_questions(self) -> None:
+    def action_add_questions(
+        self,
+        module_slug: Optional[str] = None,
+        day_number: Optional[int] = None,
+        file_path_override: Optional[str] = None,
+    ) -> None:
         console.print(Panel("[bold]Add Questions & Answers to a Day[/bold]", style="cyan"))
-        slug = self.select_module()
+        slug = module_slug or self.select_module()
         if not slug: return
-        day_num = self.select_day(slug)
+        day_num = day_number if day_number is not None else self.select_day(slug)
         if day_num is None: return
-
-        mode = questionary.select(
-            "Question Input Mode:",
-            choices=[
-                "Upload structured file (.md or .json)",
-                "Add a single question interactively"
-            ]
-        ).ask()
 
         parsed_questions: list[dict[str, Any]] = []
 
-        if mode.startswith("Upload"):
-            file_path = pick_single_file("Select Questions File (.md or .json)")
+        if file_path_override:
+            file_path = Path(file_path_override).resolve()
             ext = file_path.suffix.lower()
             raw_text = file_path.read_text(encoding="utf-8")
-
             if ext == ".json":
                 parsed_questions = json.loads(raw_text)
             else:
                 parsed_questions = parse_questions_markdown(raw_text)
-
             if not parsed_questions:
                 console.print("[red]No questions could be parsed from the selected file.[/red]")
                 return
         else:
-            q_text = questionary.text("Question:").ask()
-            if not q_text: return
-            answer = questionary.text("Direct Answer:").ask() or ""
-            explanation = questionary.text("Explain Simply / Detailed Analogy:").ask() or answer
-            tags_str = questionary.text("Tags (comma separated):", default="").ask() or ""
-            tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+            mode = questionary.select(
+                "Question Input Mode:",
+                choices=[
+                    "Upload structured file (.md or .json)",
+                    "Add a single question interactively"
+                ]
+            ).ask()
 
-            parsed_questions = [{
-                "id": f"q-{slugify(q_text)[:40]}",
-                "question": q_text,
-                "answer": answer,
-                "explanation": explanation,
-                "tags": tags,
-            }]
+            if mode and mode.startswith("Upload"):
+                file_path = pick_single_file("Select Questions File (.md or .json)")
+                ext = file_path.suffix.lower()
+                raw_text = file_path.read_text(encoding="utf-8")
+
+                if ext == ".json":
+                    parsed_questions = json.loads(raw_text)
+                else:
+                    parsed_questions = parse_questions_markdown(raw_text)
+
+                if not parsed_questions:
+                    console.print("[red]No questions could be parsed from the selected file.[/red]")
+                    return
+            elif mode:
+                q_text = questionary.text("Question:").ask()
+                if not q_text: return
+                answer = questionary.text("Direct Answer:").ask() or ""
+                explanation = questionary.text("Explain Simply / Detailed Analogy:").ask() or answer
+                tags_str = questionary.text("Tags (comma separated):", default="").ask() or ""
+                tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+
+                parsed_questions = [{
+                    "id": f"q-{slugify(q_text)[:40]}",
+                    "question": q_text,
+                    "answer": answer,
+                    "explanation": explanation,
+                    "tags": tags,
+                }]
+            else:
+                return
 
         folder = Agent2Placement.day_folder(day_num)
         day_key = f"modules/{slug}/days/{folder}/day.json"
@@ -1044,20 +1081,37 @@ class IngestCLI:
         log_pending_op(f"add {len(parsed_questions)} questions to Day {day_num}")
         console.print(f"[bold green]Successfully merged {len(parsed_questions)} questions into Day {day_num}![/bold green]")
 
-    def action_add_link(self) -> None:
+    def action_add_link(
+        self,
+        module_slug: Optional[str] = None,
+        day_number: Optional[int] = None,
+        url: Optional[str] = None,
+        label: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> None:
         console.print(Panel("[bold]Add External Resource Link to Day[/bold]", style="cyan"))
-        slug = self.select_module()
+        slug = module_slug or self.select_module()
         if not slug: return
-        day_num = self.select_day(slug)
+        day_num = day_number if day_number is not None else self.select_day(slug)
         if day_num is None: return
 
-        url = questionary.text("URL (http/https):").ask()
-        if not url: return
-        url = self.agent2.validate_url(url)
+        if url is None:
+            raw_url = questionary.text("URL (http/https):").ask()
+            if not raw_url: return
+            url_val = self.agent2.validate_url(raw_url)
+        else:
+            url_val = self.agent2.validate_url(url)
 
-        label = questionary.text("Link Label / Title:").ask()
-        if not label: return
-        description = questionary.text("Description (optional):", default="").ask() or ""
+        if label is None:
+            label_val = questionary.text("Link Label / Title:").ask()
+            if not label_val: return
+        else:
+            label_val = label
+
+        if description is None:
+            desc_val = questionary.text("Description (optional):", default="").ask() or ""
+        else:
+            desc_val = description
 
         folder = Agent2Placement.day_folder(day_num)
         day_key = f"modules/{slug}/days/{folder}/day.json"
@@ -1068,11 +1122,11 @@ class IngestCLI:
 
         links = day_json.get("links", [])
         # Dedupe by URL
-        links = [l for l in links if l.get("url") != url]
+        links = [l for l in links if l.get("url") != url_val]
         links.append({
-            "label": label,
-            "url": url,
-            "description": description,
+            "label": label_val,
+            "url": url_val,
+            "description": desc_val,
         })
         day_json["links"] = links
         day_json["updatedAt"] = datetime.now(timezone.utc).isoformat()
@@ -1083,8 +1137,8 @@ class IngestCLI:
 
         self.storage.put_json(day_key, day_json, cache="manifest")
         self.agent5.recompute_manifest(slug)
-        log_pending_op(f"add link '{label}' to Day {day_num}")
-        console.print(f"[bold green]Link '{label}' successfully added to Day {day_num}![/bold green]")
+        log_pending_op(f"add link '{label_val}' to Day {day_num}")
+        console.print(f"[bold green]Link '{label_val}' successfully added to Day {day_num}![/bold green]")
 
     def action_create_lab(self) -> None:
         console.print(Panel("[bold]Create a New Lab Exercise[/bold]", style="cyan"))
@@ -1149,41 +1203,45 @@ class IngestCLI:
         log_pending_op(f"create Lab {lab_id} in '{slug}'")
         console.print(f"[bold green]Successfully created Lab {lab_id} ('{title}')![/bold green]")
 
-    def action_add_lab_notes(self) -> None:
-        console.print(Panel("[bold]Add Ingested Notes to Lab[/bold]", style="cyan"))
-        slug = self.select_module()
-        if not slug: return
-        lab_id = self.select_lab(slug)
-        if not lab_id: return
-
-        file_path = pick_single_file("Select Lab Notes (.docx, .md, .html)")
-        staged = self.agent1.process(file_path)
-
-        dest_key = Agent2Placement.lab_notes_key(slug, lab_id, staged.format)
-        console.print(f"Destination: [cyan]{dest_key}[/cyan] ({staged.size_bytes} B)")
-
-        if not self.auto_yes and not questionary.confirm("Upload notes?").ask():
-            self.agent1.cleanup()
-            return
-
-        if self.dry_run:
-            self.agent1.cleanup()
-            console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
-            return
-
-        backup_dir = self.agent2.create_backup_dir()
-        lab_key = f"modules/{slug}/labs/{lab_id}/lab.json"
-        b_lab = self.agent2.backup_json_file(lab_key, backup_dir)
-        b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
-
-        change_set = ChangeSet(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            operation="add_lab_notes",
-            module_slug=slug,
-            backup_files={k: str(v) for k, v in [(lab_key, b_lab), (f"modules/{slug}/manifest.json", b_man)] if v},
-        )
-
+    def action_add_lab_notes(
+        self,
+        module_slug: Optional[str] = None,
+        lab_id: Optional[str] = None,
+        file_path_override: Optional[str] = None,
+    ) -> None:
+        self.agent1.new_run()
         try:
+            console.print(Panel("[bold]Add Ingested Notes to Lab[/bold]", style="cyan"))
+            slug = module_slug or self.select_module()
+            if not slug: return
+            target_lab = lab_id or self.select_lab(slug)
+            if not target_lab: return
+
+            file_path = file_path_override or pick_single_file("Select Lab Notes (.docx, .md, .html)")
+            staged = self.agent1.process(file_path)
+
+            dest_key = Agent2Placement.lab_notes_key(slug, target_lab, staged.format)
+            console.print(f"Destination: [cyan]{dest_key}[/cyan] ({staged.size_bytes} B)")
+
+            if not self.auto_yes and not questionary.confirm("Upload notes?").ask():
+                return
+
+            if self.dry_run:
+                console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
+                return
+
+            backup_dir = self.agent2.create_backup_dir()
+            lab_key = f"modules/{slug}/labs/{target_lab}/lab.json"
+            b_lab = self.agent2.backup_json_file(lab_key, backup_dir)
+            b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
+
+            change_set = ChangeSet(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                operation="add_lab_notes",
+                module_slug=slug,
+                backup_files={k: str(v) for k, v in [(lab_key, b_lab), (f"modules/{slug}/manifest.json", b_man)] if v},
+            )
+
             self.storage.put_file(dest_key, staged.staged_file, get_content_type(dest_key), cache="immutable")
             change_set.uploaded_keys.append(dest_key)
             (backup_dir / "__changeset__.json").write_text(
@@ -1193,7 +1251,7 @@ class IngestCLI:
 
             lab_json, _ = self.storage.get_json(lab_key)
             if not lab_json:
-                lab_json = {"id": lab_id, "number": 1, "category": "hands-on", "title": lab_id}
+                lab_json = {"id": target_lab, "number": 1, "category": "hands-on", "title": target_lab}
 
             lab_json["notes"] = {
                 "path": dest_key,
@@ -1208,49 +1266,53 @@ class IngestCLI:
             self.agent5.recompute_manifest(slug)
             self.agent5.recompute_root_index()
 
-            log_pending_op(f"add notes to Lab {lab_id}")
-            console.print(f"[bold green]Lab notes successfully uploaded to {lab_id}![/bold green]")
+            log_pending_op(f"add notes to Lab {target_lab}")
+            console.print(f"[bold green]Lab notes successfully uploaded to {target_lab}![/bold green]")
         finally:
             self.agent1.cleanup()
 
-    def action_add_lab_doodle(self) -> None:
-        console.print(Panel("[bold]Add Architectural Doodle to Lab[/bold]", style="cyan"))
-        slug = self.select_module()
-        if not slug: return
-        lab_id = self.select_lab(slug)
-        if not lab_id: return
-
-        file_path = pick_single_file("Select Lab Doodle / Sketch (JPG, PNG, WebP, SVG)")
-        staged = self.agent1.process(file_path)
-
-        dest_img_key = Agent2Placement.lab_doodle_key(slug, lab_id, is_thumb=False, ext=staged.format)
-        dest_thumb_key = Agent2Placement.lab_doodle_key(slug, lab_id, is_thumb=True, ext=staged.format)
-
-        console.print(f"Destination: [cyan]{dest_img_key}[/cyan] ({staged.width}x{staged.height})")
-
-        if not self.auto_yes and not questionary.confirm("Upload doodle?").ask():
-            self.agent1.cleanup()
-            return
-
-        if self.dry_run:
-            self.agent1.cleanup()
-            console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
-            return
-
-        backup_dir = self.agent2.create_backup_dir()
-        lab_key = f"modules/{slug}/labs/{lab_id}/lab.json"
-        b_lab = self.agent2.backup_json_file(lab_key, backup_dir)
-        b_vis = self.agent2.backup_json_file(f"modules/{slug}/visuals.json", backup_dir)
-        b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
-
-        change_set = ChangeSet(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            operation="add_lab_doodle",
-            module_slug=slug,
-            backup_files={k: str(v) for k, v in [(lab_key, b_lab), (f"modules/{slug}/visuals.json", b_vis), (f"modules/{slug}/manifest.json", b_man)] if v},
-        )
-
+    def action_add_lab_doodle(
+        self,
+        module_slug: Optional[str] = None,
+        lab_id: Optional[str] = None,
+        file_path_override: Optional[str] = None,
+    ) -> None:
+        self.agent1.new_run()
         try:
+            console.print(Panel("[bold]Add Architectural Doodle to Lab[/bold]", style="cyan"))
+            slug = module_slug or self.select_module()
+            if not slug: return
+            target_lab = lab_id or self.select_lab(slug)
+            if not target_lab: return
+
+            file_path = file_path_override or pick_single_file("Select Lab Doodle / Sketch (JPG, PNG, WebP, SVG)")
+            staged = self.agent1.process(file_path)
+
+            dest_img_key = Agent2Placement.lab_doodle_key(slug, target_lab, is_thumb=False, ext=staged.format)
+            dest_thumb_key = Agent2Placement.lab_doodle_key(slug, target_lab, is_thumb=True, ext=staged.format)
+
+            console.print(f"Destination: [cyan]{dest_img_key}[/cyan] ({staged.width}x{staged.height})")
+
+            if not self.auto_yes and not questionary.confirm("Upload doodle?").ask():
+                return
+
+            if self.dry_run:
+                console.print("[yellow]Dry-run mode: no changes written.[/yellow]")
+                return
+
+            backup_dir = self.agent2.create_backup_dir()
+            lab_key = f"modules/{slug}/labs/{target_lab}/lab.json"
+            b_lab = self.agent2.backup_json_file(lab_key, backup_dir)
+            b_vis = self.agent2.backup_json_file(f"modules/{slug}/visuals.json", backup_dir)
+            b_man = self.agent2.backup_json_file(f"modules/{slug}/manifest.json", backup_dir)
+
+            change_set = ChangeSet(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                operation="add_lab_doodle",
+                module_slug=slug,
+                backup_files={k: str(v) for k, v in [(lab_key, b_lab), (f"modules/{slug}/visuals.json", b_vis), (f"modules/{slug}/manifest.json", b_man)] if v},
+            )
+
             self.storage.put_file(dest_img_key, staged.staged_file, get_content_type(dest_img_key), cache="immutable")
             change_set.uploaded_keys.append(dest_img_key)
 
@@ -1273,7 +1335,7 @@ class IngestCLI:
 
             lab_json, _ = self.storage.get_json(lab_key)
             if not lab_json:
-                lab_json = {"id": lab_id, "number": 1, "category": "hands-on", "title": lab_id}
+                lab_json = {"id": target_lab, "number": 1, "category": "hands-on", "title": target_lab}
 
             lab_json["doodle"] = {
                 "path": dest_img_key,
@@ -1291,8 +1353,8 @@ class IngestCLI:
             self.agent5.recompute_manifest(slug)
             self.agent5.recompute_visuals_index(slug)
 
-            log_pending_op(f"add doodle to Lab {lab_id}")
-            console.print(f"[bold green]Lab doodle successfully attached to {lab_id}![/bold green]")
+            log_pending_op(f"add doodle to Lab {target_lab}")
+            console.print(f"[bold green]Lab doodle successfully attached to {target_lab}![/bold green]")
         finally:
             self.agent1.cleanup()
 
@@ -1935,28 +1997,32 @@ class IngestCLI:
                 break
 
             try:
-                if choice == OperationType.CREATE_MODULE.value:
-                    self.action_create_module()
-                elif choice == OperationType.CREATE_DAY.value:
-                    self.action_create_day()
-                elif choice == OperationType.ADD_SUMMARY.value:
-                    self.action_add_summary()
-                elif choice == OperationType.ADD_TRANSCRIPT.value:
-                    self.action_add_transcript()
-                elif choice == OperationType.ADD_BOARD_PHOTO.value:
-                    self.action_add_board_photo()
-                elif choice == OperationType.ADD_QUESTIONS.value:
-                    self.action_add_questions()
-                elif choice == OperationType.ADD_LINK.value:
-                    self.action_add_link()
-                elif choice == OperationType.CREATE_LAB.value:
-                    self.action_create_lab()
-                elif choice == OperationType.ADD_LAB_NOTES.value:
-                    self.action_add_lab_notes()
-                elif choice == OperationType.ADD_LAB_DOODLE.value:
-                    self.action_add_lab_doodle()
-                elif choice == OperationType.REMOVE_ITEM.value:
-                    self.action_remove()
+                self.agent1.new_run()
+                try:
+                    if choice == OperationType.CREATE_MODULE.value:
+                        self.action_create_module()
+                    elif choice == OperationType.CREATE_DAY.value:
+                        self.action_create_day()
+                    elif choice == OperationType.ADD_SUMMARY.value:
+                        self.action_add_summary()
+                    elif choice == OperationType.ADD_TRANSCRIPT.value:
+                        self.action_add_transcript()
+                    elif choice == OperationType.ADD_BOARD_PHOTO.value:
+                        self.action_add_board_photo()
+                    elif choice == OperationType.ADD_QUESTIONS.value:
+                        self.action_add_questions()
+                    elif choice == OperationType.ADD_LINK.value:
+                        self.action_add_link()
+                    elif choice == OperationType.CREATE_LAB.value:
+                        self.action_create_lab()
+                    elif choice == OperationType.ADD_LAB_NOTES.value:
+                        self.action_add_lab_notes()
+                    elif choice == OperationType.ADD_LAB_DOODLE.value:
+                        self.action_add_lab_doodle()
+                    elif choice == OperationType.REMOVE_ITEM.value:
+                        self.action_remove()
+                finally:
+                    self.agent1.cleanup()
             except KeyboardInterrupt:
                 console.print("\n[yellow]Operation canceled by user.[/yellow]")
             except Exception as e:

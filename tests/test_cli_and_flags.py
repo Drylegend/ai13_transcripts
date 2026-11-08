@@ -11,7 +11,7 @@ from ingest.agents.agent3_numbering import Agent3Numbering
 from ingest.agents.agent4_validation import Agent4Validation
 from ingest.agents.agent5_publisher import Agent5Publisher
 from ingest.cli import IngestCLI
-from ingest.config import BACKUP_DIR
+from ingest.config import BACKUP_DIR, STAGING_DIR
 from ingest.storage.local import LocalStorage
 
 
@@ -546,5 +546,130 @@ def test_stats_command_reporting(tmp_path):
     cli = IngestCLI(storage, target="site", auto_yes=True)
     cli.action_init(commit=False)
     cli.action_stats()
+
+
+# ── Regression Tests: Multi-item back-to-back session & staging cleanup ──
+
+def test_back_to_back_items_in_same_session_no_staging_leftovers(tmp_path):
+    """
+    Regression test: Verifies that multiple different items (summary, transcript 1,
+    transcript 2, board photo) added consecutively within the SAME session/process
+    all succeed without staging directory collisions or leftovers.
+    """
+    storage = LocalStorage(tmp_path / "content")
+    cli = IngestCLI(storage, target="site", auto_yes=True)
+    cli.action_init(commit=False)
+
+    slug = "session-mod"
+    cli.action_create_module(title="Session Test Module", slug=slug)
+    cli.action_create_day(module_slug=slug, day_number=1, title="Day One", recap="Class recap")
+
+    # 1. Add Summary (.docx)
+    import docx
+    sum_docx = tmp_path / "day1_summary.docx"
+    doc = docx.Document()
+    doc.add_heading("Day 1 Architecture Summary", level=1)
+    doc.add_paragraph("Comprehensive summary paragraph.")
+    doc.save(str(sum_docx))
+
+    cli.action_add_summary(module_slug=slug, day_number=1, file_path_override=str(sum_docx))
+
+    day_json, _ = storage.get_json(f"modules/{slug}/days/day-01/day.json")
+    assert day_json is not None
+    assert day_json.get("summary") is not None
+    assert day_json["summary"]["format"] == "docx"
+    assert len(list(STAGING_DIR.glob("run_*"))) == 0
+
+    # 2. Add Transcript 1 (.md)
+    t1_file = tmp_path / "day1_t1.md"
+    t1_file.write_text("# Morning Session\nInstructor: Welcome to Day 1.", encoding="utf-8")
+
+    cli.action_add_transcript(
+        module_slug=slug,
+        day_number=1,
+        order=1,
+        title="Morning Session",
+        file_path_override=str(t1_file)
+    )
+
+    day_json, _ = storage.get_json(f"modules/{slug}/days/day-01/day.json")
+    assert len(day_json.get("transcripts", [])) == 1
+    assert day_json["transcripts"][0]["title"] == "Morning Session"
+    assert len(list(STAGING_DIR.glob("run_*"))) == 0
+
+    # 3. Add Transcript 2 (.md)
+    t2_file = tmp_path / "day1_t2.md"
+    t2_file.write_text("# Afternoon Session\nInstructor: Hands-on implementation.", encoding="utf-8")
+
+    cli.action_add_transcript(
+        module_slug=slug,
+        day_number=1,
+        order=2,
+        title="Afternoon Session",
+        file_path_override=str(t2_file)
+    )
+
+    day_json, _ = storage.get_json(f"modules/{slug}/days/day-01/day.json")
+    assert len(day_json.get("transcripts", [])) == 2
+    assert day_json["transcripts"][1]["title"] == "Afternoon Session"
+    assert len(list(STAGING_DIR.glob("run_*"))) == 0
+
+    # 4. Add Board Photo (.png -> webp)
+    img_file = tmp_path / "whiteboard.png"
+    img = Image.new("RGB", (800, 600), color=(220, 230, 240))
+    img.save(img_file, format="PNG")
+
+    cli.action_add_board_photo(
+        module_slug=slug,
+        day_number=1,
+        caption="Architecture Diagram",
+        file_path_override=str(img_file)
+    )
+
+    day_json, _ = storage.get_json(f"modules/{slug}/days/day-01/day.json")
+    assert len(day_json.get("boards", [])) == 1
+    assert day_json["boards"][0]["caption"] == "Architecture Diagram"
+    assert len(list(STAGING_DIR.glob("run_*"))) == 0
+
+    # Final check: .staging/ has zero leftovers
+    assert len(list(STAGING_DIR.glob("run_*"))) == 0
+
+
+def test_failed_item_followed_by_valid_item_succeeds_and_cleans_up(tmp_path):
+    """
+    Regression test: Verifies that if an item fails validation (e.g. invalid file),
+    its staging area is cleanly discarded and the immediately following valid item
+    in the same session succeeds without any leftover interference.
+    """
+    storage = LocalStorage(tmp_path / "content")
+    cli = IngestCLI(storage, target="site", auto_yes=True)
+    cli.action_init(commit=False)
+
+    slug = "fail-recover-mod"
+    cli.action_create_module(title="Fail Recover Module", slug=slug)
+    cli.action_create_day(module_slug=slug, day_number=1, title="Day One", recap="Recap")
+
+    # 1. Attempt failed upload with corrupt docx
+    bad_file = tmp_path / "bad.docx"
+    bad_file.write_bytes(b"corrupt binary that is not a zip or docx")
+
+    with pytest.raises(ValueError, match="Corrupted or invalid Word document"):
+        cli.action_add_summary(module_slug=slug, day_number=1, file_path_override=str(bad_file))
+
+    # Staging must be cleaned up even on failure
+    assert len(list(STAGING_DIR.glob("run_*"))) == 0
+
+    # 2. Immediately ingest a valid markdown file on the SAME cli instance
+    good_file = tmp_path / "good.md"
+    good_file.write_text("# Valid Summary Notes\nAll concepts explained cleanly.", encoding="utf-8")
+
+    cli.action_add_summary(module_slug=slug, day_number=1, file_path_override=str(good_file))
+
+    day_json, _ = storage.get_json(f"modules/{slug}/days/day-01/day.json")
+    assert day_json is not None
+    assert day_json.get("summary") is not None
+    assert day_json["summary"]["format"] == "md"
+    assert len(list(STAGING_DIR.glob("run_*"))) == 0
+
 
 

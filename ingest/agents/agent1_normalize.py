@@ -30,18 +30,40 @@ class Agent1Normalize:
     """
 
     def __init__(self, run_id: Optional[str] = None):
+        self.run_id: str = ""
+        self.staging_dir: Path = STAGING_DIR
+        self.warnings: list[str] = []
+        if run_id:
+            self.new_run(run_id)
+
+    def new_run(self, run_id: Optional[str] = None) -> Path:
+        """Starts a fresh run with a unique run_id and creates its staging dir."""
         self.run_id = run_id or uuid.uuid4().hex[:8]
+        STAGING_DIR.mkdir(parents=True, exist_ok=True)
         self.staging_dir = STAGING_DIR / f"run_{self.run_id}"
         self.staging_dir.mkdir(parents=True, exist_ok=True)
-        self.warnings: list[str] = []
+        self.warnings = []
+        return self.staging_dir
 
     def cleanup(self) -> None:
         """Removes the temporary staging folder for this run."""
         try:
-            if self.staging_dir.exists():
+            if hasattr(self, "staging_dir") and self.staging_dir != STAGING_DIR and self.staging_dir.exists():
                 shutil.rmtree(self.staging_dir)
         except Exception as e:
-            log.warning(f"Could not remove staging dir {self.staging_dir}: {e}")
+            log.warning(f"Could not remove staging dir {getattr(self, 'staging_dir', '')}: {e}")
+
+    @classmethod
+    def clean_all_staging(cls) -> None:
+        """Removes all run_* folders from .staging/."""
+        if not STAGING_DIR.exists():
+            return
+        for item in STAGING_DIR.glob("run_*"):
+            try:
+                if item.is_dir():
+                    shutil.rmtree(item)
+            except Exception as e:
+                log.warning(f"Could not remove stale staging dir {item}: {e}")
 
     def _calc_hash(self, file_path: Path) -> str:
         """Computes the first 10 hex characters of the SHA-256 digest."""
@@ -56,6 +78,15 @@ class Agent1Normalize:
         source_path = Path(source_path).resolve()
         if not source_path.is_file():
             raise FileNotFoundError(f"Source file does not exist: {source_path}")
+
+        # Ensure root STAGING_DIR exists
+        STAGING_DIR.mkdir(parents=True, exist_ok=True)
+
+        # If staging_dir does not exist or was cleaned up, start a fresh run
+        if not hasattr(self, "staging_dir") or self.staging_dir == STAGING_DIR or not self.staging_dir.exists():
+            self.new_run()
+        else:
+            self.staging_dir.mkdir(parents=True, exist_ok=True)
 
         raw_size = source_path.stat().st_size
         ext = source_path.suffix.lower()
