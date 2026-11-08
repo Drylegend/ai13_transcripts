@@ -76,7 +76,7 @@ export function DayHeaderCard({
           {day.boards.length > 0 && (
             <Badge variant="neutral" size="sm">
               <Presentation size={12} className="mr-1" />
-              {day.boards.length} Boards
+              {day.boards.length} {day.boards.length === 1 ? "Board" : "Boards"}
             </Badge>
           )}
 

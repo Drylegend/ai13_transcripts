@@ -116,9 +116,9 @@ export function Shell() {
       </a>
 
       {/* Fixed 64px Header */}
-      <header className="fixed top-0 left-0 right-0 z-40 flex h-16 w-full items-center justify-between border-b border-(--color-border) bg-(--color-surface)/85 px-4 backdrop-blur-xl sm:px-6">
+      <header className="fixed top-0 left-0 right-0 z-40 flex h-16 w-full items-center justify-between gap-3 border-b border-(--color-border) bg-(--color-surface)/85 px-4 backdrop-blur-xl sm:px-6">
         {/* Left: Mobile Drawer Trigger + Logo + Stacked Module Title */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <IconButton
             onClick={() => setMobileDrawerOpen(true)}
             variant="ghost"
@@ -129,12 +129,12 @@ export function Shell() {
             <Menu size={20} />
           </IconButton>
 
-          <Link to="/" className="shrink-0 flex items-center">
+          <Link to="/" className="flex items-center min-w-0">
             <Logo />
           </Link>
 
           {/* Stacked Current Module Title (micro-label style like old portal) */}
-          <div className="hidden sm:flex flex-col border-l border-(--color-border) pl-3 min-w-0">
+          <div className="hidden xl:flex flex-col border-l border-(--color-border) pl-3 min-w-0">
             {module ? (
               <>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-(--color-primary) truncate">
@@ -153,7 +153,7 @@ export function Shell() {
         </div>
 
         {/* Center: Search Field Button */}
-        <div className="flex-1 max-w-md mx-4 hidden md:block">
+        <div className="hidden sm:block min-w-0 flex-1 max-w-md mx-2 sm:mx-4">
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
@@ -164,7 +164,7 @@ export function Shell() {
               <Search size={16} className="text-(--color-text-subtle) shrink-0" />
               <span className="truncate">Search modules, days, labs, questions...</span>
             </div>
-            <kbd className="rounded-md bg-(--color-container) px-2 py-0.5 text-[11px] font-mono font-medium text-(--color-text-subtle) shrink-0">
+            <kbd className="hidden lg:inline-block rounded-md bg-(--color-container) px-2 py-0.5 text-[11px] font-mono font-medium text-(--color-text-subtle) shrink-0">
               Ctrl K
             </kbd>
           </button>
@@ -172,17 +172,6 @@ export function Shell() {
 
         {/* Right: ThemeToggle + Settings / Progress & Backup */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Mobile search icon */}
-          <IconButton
-            onClick={() => setSearchOpen(true)}
-            variant="ghost"
-            size="sm"
-            aria-label="Search"
-            className="md:hidden"
-          >
-            <Search size={18} />
-          </IconButton>
-
           <ThemeToggle />
 
           <IconButton
@@ -190,7 +179,7 @@ export function Shell() {
             variant="ghost"
             size="sm"
             aria-label="Progress & Backup"
-            className="text-(--color-text-muted) hover:text-(--color-primary)"
+            className="hidden lg:inline-flex text-(--color-text-muted) hover:text-(--color-primary)"
           >
             <Database size={18} />
           </IconButton>

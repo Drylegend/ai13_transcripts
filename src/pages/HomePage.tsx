@@ -113,14 +113,14 @@ function ModuleCard({ module }: { module: ModuleIndexEntry }) {
               {module.labCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-(--color-container) px-2.5 py-1 text-[11px] font-medium text-(--color-text)">
                   <FlaskConical size={13} />
-                  {module.labCount} Labs
+                  {module.labCount} {module.labCount === 1 ? "Lab" : "Labs"}
                 </span>
               )}
 
               {module.boardCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-(--color-container) px-2.5 py-1 text-[11px] font-medium text-(--color-text)">
                   <Presentation size={13} />
-                  {module.boardCount} Boards
+                  {module.boardCount} {module.boardCount === 1 ? "Board" : "Boards"}
                 </span>
               )}
             </div>
@@ -221,7 +221,7 @@ export default function HomePage() {
             </p>
           </div>
           {modules.length > 0 && (
-            <Badge variant="pill" size="md">
+            <Badge variant="pill" size="md" className="whitespace-nowrap">
               {modules.length} {modules.length === 1 ? "Module" : "Modules"}
             </Badge>
           )}
