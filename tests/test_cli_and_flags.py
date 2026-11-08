@@ -525,7 +525,7 @@ def test_file_size_limits_25mb_rejection_and_10mb_warning(tmp_path):
         f.seek(26 * 1024 * 1024)
         f.write(b"\0")
 
-    with pytest.raises(ValueError, match="Cloudflare Pages limit is 25 MiB per file"):
+    with pytest.raises(ValueError, match="Cloudflare limit is 25 MiB per file"):
         agent1.process(big_file)
 
     # 11 MiB file (warning)

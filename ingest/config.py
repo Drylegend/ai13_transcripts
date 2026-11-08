@@ -32,12 +32,19 @@ DEV_CONTENT_DIR = ROOT_DIR / "dev-content"
 SITE_CONTENT_DIR = ROOT_DIR / "public" / "content"
 PUBLISH_LOG_FILE = LOG_DIR / "pending_operations.json"
 
-# Cloudflare Pages Limits (for site target and stats)
-PAGES_MAX_FILES = 20_000
-PAGES_WARN_FILES = 14_000                  # 70% of 20,000
-PAGES_HARD_WARN_FILES = 15_000
-PAGES_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024   # 25 MiB
-PAGES_WARN_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB
+# Cloudflare Workers / Static Assets Limits (for site target and stats)
+WORKERS_MAX_FILES = 20_000
+WORKERS_WARN_FILES = 14_000                  # 70% of 20,000
+WORKERS_HARD_WARN_FILES = 15_000
+WORKERS_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024   # 25 MiB
+WORKERS_WARN_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB
+
+# Aliases for backward compatibility
+PAGES_MAX_FILES = WORKERS_MAX_FILES
+PAGES_WARN_FILES = WORKERS_WARN_FILES
+PAGES_HARD_WARN_FILES = WORKERS_HARD_WARN_FILES
+PAGES_MAX_FILE_SIZE_BYTES = WORKERS_MAX_FILE_SIZE_BYTES
+PAGES_WARN_FILE_SIZE_BYTES = WORKERS_WARN_FILE_SIZE_BYTES
 
 # Ensure runtime directories exist
 LOG_DIR.mkdir(parents=True, exist_ok=True)

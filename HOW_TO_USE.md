@@ -8,7 +8,7 @@ Welcome to the **Race | AI 13 | Transcripts & Summary** portal content managemen
 1. [Overview & Architecture](#1-overview--architecture)
 2. [Content Model](#2-content-model)
 3. [Prerequisites & First-Time Machine Setup](#3-prerequisites--first-time-machine-setup)
-4. [First-Time Cloudflare Pages Deployment (No Card)](#4-first-time-cloudflare-pages-deployment-no-card)
+4. [First-Time Cloudflare Workers Static Assets Deployment (No Card)](#4-first-time-cloudflare-workers-static-assets-deployment-no-card)
 5. [Preparing Documents Before Upload](#5-preparing-documents-before-upload)
 6. [First Walkthrough: Ingest Your First Module & Publish](#6-first-walkthrough-ingest-your-first-module--publish)
 7. [The Questions File & AI Prompt Generator](#7-the-questions-file--ai-prompt-generator)
@@ -29,7 +29,7 @@ The portal architecture is decoupled into three simple components:
 
 ```
 ┌─────────────────────────────────┐       ┌─────────────────────────────────┐       ┌─────────────────────────────────┐
-│          Your Computer          │       │          GitHub / Git           │       │        Cloudflare Pages         │
+│          Your Computer          │       │          GitHub / Git           │       │    Cloudflare Workers Assets    │
 │       (python ingest.py)        │ ────► │        (public/content/)        │ ────► │      (Fast Web Frontend)        │
 │ Ingests 1 item at a time        │       │ Stores documents & manifests    │       │ Students read notes, run quiz,  │
 │ Compresses images, updates JSON │       │ No credit card or bucket needed │       │ search transcripts instantly    │
@@ -37,8 +37,8 @@ The portal architecture is decoupled into three simple components:
 ```
 
 1. **The Ingest Tool on your computer** (`python ingest.py`): An interactive, multi-agent Python CLI that guides you to add files **one item at a time**. It validates formats, compresses photos to WebP with thumbnails, updates manifests, and keeps search indices in sync.
-2. **Built-in Content Directory** (`public/content/`): Content lives directly inside your repository under `public/content/`. Vite serves it locally during development at `/content`, and Vite copies it into `dist/content` on production builds.
-3. **Cloudflare Pages Website**: When you run `python ingest.py publish`, the tool commits only `public/content/` to Git and pushes to GitHub. Cloudflare Pages automatically detects the push, runs `npm run build`, and updates your live site in ~1 minute.
+2. **Built-in Content Directory** (`public/content/`): Content lives directly inside your repository under `public/content/`. Vite serves it locally during development at `/content`, and copies it into `dist/content` on production builds.
+3. **Cloudflare Workers Static Assets Website**: When you run `python ingest.py publish`, the tool commits only `public/content/` to Git and pushes to GitHub. Cloudflare automatically detects the push, runs `npm run build` and `npx wrangler deploy`, and updates your live site in ~1 minute.
 
 ---
 
@@ -144,51 +144,66 @@ Successfully initialized repository bootstrap files: index.json and search-index
 
 ---
 
-## 4. First-Time Cloudflare Pages Deployment (No Card)
+## 4. First-Time Cloudflare Workers Static Assets Deployment (No Card)
 
-Deploying to Cloudflare Pages is 100% free and does **not** ask for a payment card.
+Deploying to Cloudflare Workers Static Assets is 100% free and does **not** ask for a payment card.
 
-### Step 1: Connect GitHub to Cloudflare Pages
+### Step 1: Connect GitHub to Cloudflare Workers
 1. Log in to your [Cloudflare Dashboard](https://dash.cloudflare.com/).
 2. In the left navigation menu, click **Workers & Pages**.
-3. Click the **Create application** button, then select the **Pages** tab.
-4. Click **Connect to Git** and choose your GitHub repository (`Drylegend/ai13_transcripts`).
+3. Click the **Create** button (or **Create application**), and choose **Import from Git** (or select your connected repository `Drylegend/ai13_transcripts`).
 
-### Step 2: Configure Build Settings
-Fill in the deployment form with the exact settings below:
+### Step 2: Configure Build and Deploy Settings
+Configure the project with these exact settings:
 
 | Field | Setting | Explanation |
 |---|---|---|
-| **Project name** | `ai13-transcripts` (or your choice) | Gives you `https://ai13-transcripts.pages.dev` |
+| **Project name** | `ai13-transcripts` (or your choice) | Gives you `https://ai13-transcripts.<subdomain>.workers.dev` |
 | **Production branch** | `main` | Deploys whenever `main` updates |
-| **Framework preset** | `None` | Prevents Cloudflare from guessing wrong build flags |
-| **Build command** | `npm run build` | Builds the Vite app into static assets |
-| **Build output directory** | `dist` | Where Vite places bundled HTML, JS, CSS, and content |
-| **Root directory** | `/` (leave empty / default) | Builds from repository root |
+| **Build command** | `npm run build` | Builds the Vite app into static assets in `./dist` |
+| **Deploy command** | `npx wrangler deploy` | Deploys static assets via Wrangler |
+| **Root directory** | `/` (leave default) | Builds from repository root |
 | **Environment variables** | *None* | Zero environment variables are required! |
 
-### Step 3: Node.js 22 Verification
-Cloudflare Pages respects the [`.node-version`](file:///d:/ai13_module/.node-version) file present in the repository root.
+### Step 3: Configuration via `wrangler.jsonc`
+The repository includes a committed [wrangler.jsonc](file:///d:/ai13_module/wrangler.jsonc) file in the root directory:
+```jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai13-transcripts",
+  "compatibility_date": "2026-11-04",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
+```
+- `assets.directory: "./dist"` instructs Cloudflare to serve the compiled frontend.
+- `assets.not_found_handling: "single-page-application"` enables client-side SPA routing automatically so direct links (e.g. `/m/module-slug/day/1`) load without 404s.
+
+> [!CAUTION]
+> **Do NOT create `public/_redirects`!**
+> There must be **NO `public/_redirects` file** in the repository. In Cloudflare Workers Static Assets, a `_redirects` file conflicts with the `not_found_handling: "single-page-application"` setting and causes an **infinite loop deployment error**. SPA routing is already fully handled by `wrangler.jsonc`.
+
+### Step 4: Node.js 22 Verification
+Cloudflare Workers builds respect the [`.node-version`](file:///d:/ai13_module/.node-version) file present in the repository root.
 The repository already includes `.node-version` containing `22`:
 ```bash
 cat .node-version
 # Output: 22
 ```
-This guarantees Cloudflare's build container uses modern Node.js 22 LTS with support for modern packages.
-
-### Step 4: Conserve Monthly Builds (Limit Preview Deployments)
-Cloudflare Pages provides **500 free builds per month**. To prevent accidental test branches from spending your monthly builds:
-1. In Cloudflare Pages, go to your project $\rightarrow$ **Settings** $\rightarrow$ **Builds & deployments**.
-2. Under **Preview branch deployments**, select **None** (or specify only `staging`).
-3. Now, only pushes to `main` trigger a build.
+This guarantees Cloudflare's build container uses modern Node.js 22 LTS with full support for modern packages.
 
 ### Step 5: Click Save and Deploy
-Cloudflare will build your site in ~45 seconds. When finished, you will receive your live URL: `https://<your-project>.pages.dev`.
+Cloudflare will build and deploy your project in ~45 seconds. When finished, your live site address will end in `.workers.dev`:
+```
+https://ai13-transcripts.<your-subdomain>.workers.dev
+```
 
 ### Step 6: Smoke Test
-1. Open `https://<your-project>.pages.dev` in your browser.
+1. Open your live `https://<project>.<subdomain>.workers.dev` URL in your browser.
 2. Verify you see the portal home page in its clean slate state (no error banners, no sample data).
-3. Test a deep link refresh: Navigate to any module or path (e.g. `/m/mlops-associate/day/1`) and press **F5** (Refresh). Because SPA routing is configured, the page reloads cleanly without a `404 Not Found` error.
+3. Test a deep link refresh: Navigate to any path (e.g. `/m/mlops-associate/day/1`) and press **F5** (Refresh). Because `not_found_handling` is set to `single-page-application`, the page reloads cleanly without a 404 error.
 
 ---
 
@@ -205,12 +220,12 @@ Follow these guidelines for clean, professional uploads:
 3. **File Size Guidance**:
    - Standard documents (`.docx`, `.md`, `.pdf`, `.ipynb`) are typically 50 KB – 5 MB.
    - Files $>10\text{ MiB}$ trigger a warning.
-   - Files $>25\text{ MiB}$ are **rejected** because Cloudflare Pages has a strict 25 MiB single-file limit.
+   - Files $>25\text{ MiB}$ are **rejected** because Cloudflare has a strict 25 MiB single-file limit for static assets.
 4. **File Naming Suggestions**:
    - Use clear, kebab-case or readable names: `day01-intro-mlops.docx`, `whiteboard-pipeline-arch.png`.
    - The CLI sanitizes filenames and generates clean URL keys automatically.
 5. **Privacy and Confidentiality**:
-   - Your Cloudflare Pages site is public to anyone with the link.
+   - Your site is public to anyone with the link.
    - **Do not** upload internal passwords, private corporate API keys, or confidential student records.
 
 ---
@@ -374,16 +389,16 @@ Successfully merged 3 questions into Day 1!
 
 ---
 
-### Step 8: Publish to Cloudflare Pages
+### Step 8: Publish to Cloudflare Workers
 When prompted after your ingest:
 ```
 ? What next?
-  > Publish now (git push to Cloudflare Pages)
+  > Publish now (git push to Cloudflare Workers)
 ```
 *Actual Terminal Output:*
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Publish Content to Cloudflare Pages                                         │
+│ Publish Content to Cloudflare Workers Static Assets                         │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 Pending content changes: 8 file(s) (8 added, 0 modified, 0 deleted)
@@ -400,11 +415,11 @@ Commit message: content: create module 'mlops-associate', create Day 1, and 4 mo
 ? Commit and push to origin/main? Yes
 
 Committed content changes to local git branch.
-Pushed to GitHub. Cloudflare Pages will build and deploy in ~1 minute.
-Remember: each push uses 1 of your 500 free monthly builds. Batch your uploads when possible.
+Pushed to GitHub. Cloudflare Workers will build and deploy in ~1 minute.
+Remember: free tier includes 3,000 build minutes/month (~1-2 min per publish) and unlimited static requests. Batch your uploads when possible.
 ```
 
-Open your live Cloudflare Pages URL in ~60 seconds to see Day 1 live!
+Open your live `.workers.dev` URL in ~60 seconds to see Day 1 live!
 
 ---
 
@@ -491,11 +506,11 @@ Keep this quick 5-minute routine after every class session:
   - Add questions: `add questions-set`.
   - Choose `Add another item` between files to keep working in one session.
 - [ ] **Step 4 — Publish once**:
-  - Select `Publish now (git push to Cloudflare Pages)`.
+  - Select `Publish now (git push to Cloudflare Workers)`.
   - Review the list of staged changes.
   - Confirm `[Y]`.
 - [ ] **Step 5 — Check the live site**:
-  - Open your live Pages URL after ~1 minute.
+  - Open your live `.workers.dev` URL after ~1 minute.
   - Confirm the new Day appears with tabs, viewers, and questions active.
 
 ---
@@ -622,9 +637,9 @@ Check your current storage consumption anytime:
 python ingest.py stats
 ```
 
-### Cloudflare Pages Free Tier Limits
-- **Monthly Builds**: **500 builds/month**.
-  *Recommendation*: Batch multiple uploads into a single publish session. One push = one build.
+### Cloudflare Workers Static Assets Free Tier Limits
+- **Monthly Build Minutes**: **3,000 build minutes/month** (roughly 1–2 minutes per publish, allowing 1,500–3,000 deploys every month).
+  *Static asset requests*: **Free and unlimited** across all Cloudflare global edge locations.
 - **File Count**: **20,000 files maximum**.
   *The CLI warns at 70% (14,000 files) and alerts at 75% (15,000 files).*
 - **Single File Size**: **25 MiB maximum**.
@@ -640,13 +655,15 @@ python ingest.py stats
 
 | Symptom | Cause | Solution |
 |---|---|---|
-| **Cloudflare Pages build fails** | Old Node.js version used in build container | Verify `.node-version` file exists in repo root and contains `22`. Ensure Build command is `npm run build`. |
-| **Content not showing after publish** | Build still in progress or stale browser cache | 1. Check Cloudflare Pages dashboard builds tab.<br>2. Hard refresh your browser (`Ctrl + F5` or `Cmd + Shift + R`). |
+| **Deploy fails with "Invalid _redirects / infinite loop"** | A `public/_redirects` file exists | **Delete `public/_redirects`**. In Cloudflare Workers Static Assets, `wrangler.jsonc` handles SPA routing via `not_found_handling: "single-page-application"`. A `_redirects` file creates a circular loop. |
+| **Build runs but Cloudflare changes my project settings** | Missing or uncommitted `wrangler.jsonc` | Ensure `wrangler.jsonc` is committed in the root of your Git repository so Cloudflare honors its settings. |
+| **Cloudflare Workers build fails** | Old Node.js version used in build container | Verify `.node-version` file exists in repo root and contains `22`. Ensure Build command is `npm run build`. |
+| **Content not showing after publish** | Build still in progress or stale browser cache | 1. Check Cloudflare dashboard deployments tab.<br>2. Hard refresh your browser (`Ctrl + F5` or `Cmd + Shift + R`). |
 | **"Nothing to publish"** | No uncommitted changes in `public/content/` | You have already published all current content. Ingest new items before publishing. |
 | **Git push rejected / auth failed** | Terminal not authenticated with GitHub | Run `gh auth login` or generate a GitHub Personal Access Token with `repo` scope. |
-| **File rejected: "Cloudflare Pages limit is 25 MiB"** | File exceeds single-file limit | Compress the document or image. For video or large datasets, host externally and add as a Link. |
+| **File rejected: "Cloudflare limit is 25 MiB"** | File exceeds single-file limit | Compress the document or image. For video or large datasets, host externally and add as a Link. |
 | **Blank module or missing days** | Manifests out of sync | Run `python ingest.py rebuild-index` followed by `python ingest.py publish`. |
-| **Deep link gives 404 on refresh** | SPA fallback not catching the path | Ensure Cloudflare Pages output directory is `dist`. In Vite, standard SPA routing redirects missing paths to `index.html`. |
+| **Deep link gives 404 on refresh** | SPA fallback not catching the path | Ensure `wrangler.jsonc` has `"not_found_handling": "single-page-application"` and output directory is `dist`. |
 | **Accidentally published wrong file** | Human error during upload | Run `python ingest.py remove` to remove the wrong item, re-upload the correct one, and run `python ingest.py publish`. |
 | **Merge conflict on public/content** | Multiple people pushed to `main` simultaneously | Run `git pull origin main --rebase`, resolve conflicts on JSON manifests, run `python ingest.py rebuild-index`, then push. |
 
@@ -659,7 +676,7 @@ If your library grows beyond 15,000 files or you need to host large binary files
 ### Step 1: Create an R2 Bucket
 1. In Cloudflare Dashboard, go to **R2** $\rightarrow$ **Create bucket** (e.g. `ai13-content`).
 2. Go to **Bucket Settings** $\rightarrow$ **Public Access** $\rightarrow$ Enable Custom Domain or Managed `r2.dev` URL.
-   *(Note: `r2.dev` public URLs have a Cloudflare rate limit of 10 requests/second intended for development; for production, connect a custom domain or Cloudflare Pages CDN domain).*
+   *(Note: `r2.dev` public URLs have a Cloudflare rate limit of 10 requests/second intended for development; for production, connect a custom domain or your worker domain).*
 
 ### Step 2: Configure CORS on the R2 Bucket
 In bucket settings $\rightarrow$ **CORS Policy**, paste this JSON:
@@ -667,7 +684,7 @@ In bucket settings $\rightarrow$ **CORS Policy**, paste this JSON:
 [
   {
     "AllowedOrigins": [
-      "https://your-site.pages.dev",
+      "https://your-site.workers.dev",
       "http://localhost:5173"
     ],
     "AllowedMethods": ["GET", "HEAD"],
@@ -686,7 +703,7 @@ R2_ACCESS_KEY_ID=your_r2_access_key_id
 R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
 R2_BUCKET=ai13-content
 ```
-In your Cloudflare Pages Dashboard $\rightarrow$ **Settings** $\rightarrow$ **Environment variables**:
+In your Cloudflare Pages / Workers Dashboard $\rightarrow$ **Settings** $\rightarrow$ **Environment variables**:
 ```env
 VITE_CONTENT_BASE_URL=https://your-r2-public-url.com
 ```
@@ -703,7 +720,7 @@ Because the folder layout is **identical**, copy all folders from `public/conten
 # 1. Launch interactive content wizard (Default: site mode)
 python ingest.py
 
-# 2. Publish uncommitted content to Cloudflare Pages
+# 2. Publish uncommitted content to Cloudflare Workers
 python ingest.py publish
 
 # 3. Check storage statistics, file count & free-tier limits

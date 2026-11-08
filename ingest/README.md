@@ -13,7 +13,7 @@ The Ingest tool supports three storage targets:
 1. **`site` (Default, Zero-Config & Zero-Card)**:
    - Content is stored directly inside `public/content/`.
    - Served by Vite during development at `/content` and copied into `dist/content` on production builds.
-   - Published via Git commit and push directly to Cloudflare Pages (`python ingest.py publish`).
+   - Deployed to Cloudflare Workers Static Assets via Git commit and push (`python ingest.py publish`).
    - Default target when R2 credentials are not configured.
 
 2. **`local` (Practice Sandbox)**:
@@ -51,7 +51,7 @@ flowchart TD
 
 ### The 5 Autonomous Ingestion Agents
 1. **Agent 1 (Normalize & Validate)**:
-   - Validates incoming files against Cloudflare Pages limits (10MB warning, 25MB max rejection).
+   - Validates incoming files against Cloudflare limits (10MB warning, 25MB max rejection).
    - Rejects corrupt archives, password-encrypted PDFs, empty files, and legacy `.doc` files.
    - Normalizes line endings (`\r\n` $\rightarrow$ `\n`) and cleans whitespace on Markdown files.
    - Strips GPS and camera EXIF metadata from raster images, caps dimensions at 2000px, converts to optimized WebP (`q=82`), and produces a proportional 480px thumbnail.
@@ -101,4 +101,4 @@ npm run check-content
 ```bash
 python ingest.py publish
 ```
-Commits only `public/content/` to git with an informative commit message and pushes to Cloudflare Pages.
+Commits only `public/content/` to git with an informative commit message and pushes to Cloudflare Workers Static Assets.

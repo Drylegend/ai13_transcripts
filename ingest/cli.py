@@ -241,8 +241,8 @@ class IngestCLI:
         return True
 
     def action_publish(self) -> bool:
-        """Publishes public/content changes via Git commit and push to Cloudflare Pages."""
-        console.print(Panel("[bold]Publish Content to Cloudflare Pages[/bold]", style="cyan"))
+        """Publishes public/content changes via Git commit and push to Cloudflare Workers."""
+        console.print(Panel("[bold]Publish Content to Cloudflare Workers Static Assets[/bold]", style="cyan"))
 
         # 1. Check if git repo exists
         try:
@@ -310,8 +310,8 @@ class IngestCLI:
         try:
             push_res = subprocess.run(["git", "push"], capture_output=True, text=True, cwd=ROOT_DIR)
             if push_res.returncode == 0:
-                console.print("[bold green]Pushed to GitHub. Cloudflare Pages will build and deploy in ~1 minute.[/bold green]")
-                console.print("[dim]Remember: each push uses 1 of your 500 free monthly builds. Batch your uploads when possible.[/dim]")
+                console.print("[bold green]Pushed to GitHub. Cloudflare Workers will build and deploy in ~1 minute.[/bold green]")
+                console.print("[dim]Remember: free tier includes 3,000 build minutes/month (~1-2 min per publish) and unlimited static requests. Batch your uploads when possible.[/dim]")
             else:
                 console.print(f"[yellow]Warning: 'git push' failed ({push_res.stderr.strip() or push_res.stdout.strip()}). Changes are committed locally. Run 'git push' manually when network/remote is ready.[/yellow]")
         except Exception as e:
@@ -322,8 +322,8 @@ class IngestCLI:
         return True
 
     def action_stats(self) -> None:
-        """Scans storage and reports file count, sizes, and Cloudflare Pages limit consumption."""
-        console.print(Panel("[bold]Content Storage Statistics & Cloudflare Pages Limits[/bold]", style="cyan"))
+        """Scans storage and reports file count, sizes, and Cloudflare limit consumption."""
+        console.print(Panel("[bold]Content Storage Statistics & Cloudflare Limits[/bold]", style="cyan"))
 
         files_info: list[tuple[str, int]] = []
         total_size = 0
@@ -352,7 +352,7 @@ class IngestCLI:
         table.add_row("Total Files", f"{total_files:,}")
         table.add_row("Total Content Size", f"{total_size / (1024 * 1024):.2f} MB ({total_size:,} bytes)")
         if self.target == "site":
-            table.add_row("Target Storage", "public/content (Cloudflare Pages)")
+            table.add_row("Target Storage", "public/content (Cloudflare Workers Static Assets)")
         elif self.target == "local":
             table.add_row("Target Storage", "dev-content (local sandbox)")
         else:
@@ -369,12 +369,12 @@ class IngestCLI:
                 top_table.add_row(p, f"{sz / (1024 * 1024):.2f} MB ({sz:,} B)")
             console.print(top_table)
 
-        # Cloudflare Pages Limits Check
+        # Cloudflare Limits Check
         pct_files = (total_files / PAGES_MAX_FILES) * 100
         max_file_size = top_5[0][1] if top_5 else 0
         pct_max_file = (max_file_size / PAGES_MAX_FILE_SIZE_BYTES) * 100
 
-        limits_table = Table(title="Cloudflare Pages Free Tier Limits", style="magenta")
+        limits_table = Table(title="Cloudflare Free Tier Limits", style="magenta")
         limits_table.add_column("Limit", style="bold")
         limits_table.add_column("Current / Max", justify="right")
         limits_table.add_column("Usage %", justify="right")
@@ -414,9 +414,9 @@ class IngestCLI:
 
         # Warnings if thresholds exceeded
         if total_files > PAGES_HARD_WARN_FILES:
-            console.print(f"[bold red]Warning: Total file count ({total_files:,}) exceeds 75% of Cloudflare Pages limit (20,000 files).[/bold red]")
+            console.print(f"[bold red]Warning: Total file count ({total_files:,}) exceeds 75% of Cloudflare limit (20,000 files).[/bold red]")
         elif total_files > PAGES_WARN_FILES:
-            console.print(f"[bold yellow]Warning: Total file count ({total_files:,}) is approaching Cloudflare Pages limit (20,000 files).[/bold yellow]")
+            console.print(f"[bold yellow]Warning: Total file count ({total_files:,}) is approaching Cloudflare limit (20,000 files).[/bold yellow]")
 
         if max_file_size > PAGES_WARN_FILE_SIZE_BYTES:
             console.print(f"[bold yellow]Warning: Largest file ({max_file_size / (1024 * 1024):.1f} MB) exceeds 10 MB safety threshold.[/bold yellow]")
@@ -431,7 +431,7 @@ class IngestCLI:
         except Exception:
             pass
 
-        console.print("[dim]Tip: Cloudflare Pages free tier allows up to 20,000 files and 25 MiB per file. Deleted and replaced files remain in your Git history; use external storage (R2) if your repo exceeds 1-2 GB.[/dim]")
+        console.print("[dim]Tip: Cloudflare Workers static assets free tier includes 3,000 build minutes/month, 20,000 files, and 25 MiB per file with unlimited free requests. Deleted and replaced files remain in your Git history; use external storage (R2) if your repo exceeds 1-2 GB.[/dim]")
 
     def action_create_module(
         self,
@@ -1969,12 +1969,12 @@ class IngestCLI:
                     "What next?",
                     choices=[
                         "Add another item",
-                        "Publish now (git push to Cloudflare Pages)",
+                        "Publish now (git push to Cloudflare Workers)",
                         "Done for now (publish later)",
                     ],
                 ).ask()
 
-                if next_choice == "Publish now (git push to Cloudflare Pages)":
+                if next_choice == "Publish now (git push to Cloudflare Workers)":
                     self.action_publish()
                     console.print("[dim]Publish completed. Have a great day![/dim]")
                     break
