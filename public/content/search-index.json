@@ -1,1 +1,216 @@
-[]
+[
+  {
+    "type": "module",
+    "moduleSlug": "system-thinking-for-ai",
+    "title": "System thinking for AI",
+    "snippet": "",
+    "tags": [
+      "Module"
+    ]
+  },
+  {
+    "type": "day",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "title": "Day 1",
+    "snippet": "",
+    "tags": [
+      "Day 1"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-critical-thinking-and-why-is-it-",
+    "title": "What is Critical Thinking, and why is it important in Artificial Intelligence?",
+    "snippet": "Critical thinking is the ability to question assumptions, ask uncomfortable questions, examine evidence and validate whether information or conclusions are correct. It is essential in AI because profe",
+    "tags": [
+      "Critical Thinking",
+      "Artificial Intelligence",
+      "Validation"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-the-difference-between-belief-an",
+    "title": "What is the difference between Belief and Knowledge?",
+    "snippet": "Belief is accepting something without sufficient validation, whereas knowledge involves understanding and verification. The lecture emphasizes that information without validation remains a belief.",
+    "tags": [
+      "Knowledge",
+      "Belief",
+      "Validation"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-systems-thinking-and-how-does-it",
+    "title": "What is Systems Thinking, and how does it complement Critical Thinking?",
+    "snippet": "Systems thinking involves understanding how different components, inputs, outputs and relationships interact within an overall system. Critical thinking helps identify flaws, question assumptions and ",
+    "tags": [
+      "Systems Thinking",
+      "Critical Thinking",
+      "Problem Solving"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-a-system-according-to-the-lectur",
+    "title": "What is a System according to the lecture?",
+    "snippet": "A system consists of inputs, internal processing and outputs. The objective is to understand the mapping between the inputs provided and the outputs produced.",
+    "tags": [
+      "Systems Fundamentals",
+      "Input",
+      "Output"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-an-open-system",
+    "title": "What is an Open System?",
+    "snippet": "An open system receives inputs and produces outputs, while its internal processing may not be directly known or understood. Understanding the relationship between inputs and outputs is essential when ",
+    "tags": [
+      "Open Systems",
+      "Input",
+      "Output"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-a-closed-system-and-how-does-fee",
+    "title": "What is a Closed System, and how does feedback work in it?",
+    "snippet": "A closed system incorporates feedback into its operation, allowing subsequent actions to change based on the resulting condition. The lecture uses drinking water as an example, where reduced thirst pr",
+    "tags": [
+      "Closed Systems",
+      "Feedback Loops",
+      "Systems Thinking"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-why-is-feedback-important-when-designing",
+    "title": "Why is feedback important when designing or understanding a system?",
+    "snippet": "Feedback provides information about the consequences of a system's actions and helps determine whether its objective has been achieved. It also helps identify missing factors and improve the system mo",
+    "tags": [
+      "Feedback Mechanism",
+      "System Design",
+      "Evaluation"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-how-can-an-abstract-feeling-like-satisfa",
+    "title": "How can an abstract feeling like satisfaction be broken down into measurable factors?",
+    "snippet": "The lecture explains that an abstract feeling should be examined through more specific indicators. In the drinking-water example, dry throat, stomach fullness and sweating are considered factors that ",
+    "tags": [
+      "Systems Thinking",
+      "Feedback",
+      "Measurement"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-the-difference-between-controlla",
+    "title": "What is the difference between Controllable and Uncontrollable Variables?",
+    "snippet": "Controllable variables are factors that can be deliberately adjusted within a system, whereas uncontrollable variables cannot be directly controlled. The lecture uses biryani preparation to demonstrat",
+    "tags": [
+      "Controllable Variables",
+      "Uncontrollable Variables",
+      "Context"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-context-in-systems-thinking-and-",
+    "title": "What is Context in Systems Thinking, and why does it matter?",
+    "snippet": "Context refers to the surrounding conditions or state that influence a system and its outcomes. The lecture emphasizes that understanding context is essential because the same system or action can pro",
+    "tags": [
+      "Context",
+      "Systems Thinking",
+      "Decision Making"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-how-does-machine-learning-derive-an-algo",
+    "title": "How does Machine Learning derive an algorithm from data?",
+    "snippet": "Machine Learning identifies patterns and relationships between available input data and corresponding output data to derive a mapping. This learned mapping can then be used to determine outputs for ne",
+    "tags": [
+      "Machine Learning",
+      "Pattern Recognition",
+      "Algorithms"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-why-does-the-lecture-emphasize-experimen",
+    "title": "Why does the lecture emphasize experimentation and failing early when developing AI systems?",
+    "snippet": "Experimentation helps validate assumptions, identify errors and improve system performance through actual results rather than relying on hope. The instructor emphasizes experimenting frequently, faili",
+    "tags": [
+      "Experimentation",
+      "AI Development",
+      "Validation"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-why-should-ai-professionals-understand-h",
+    "title": "Why should AI professionals understand how AI systems work instead of blindly relying on AI tools?",
+    "snippet": "AI professionals must understand how systems are built and how their components work so they can evaluate and control their behaviour. The lecture emphasizes the approach of building, dismantling and ",
+    "tags": [
+      "AI Systems",
+      "System Control",
+      "AI Engineering"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-is-the-difference-between-memorizat",
+    "title": "What is the difference between Memorization and learning patterns through Machine Learning?",
+    "snippet": "Memorization involves reproducing previously learned information, whereas Machine Learning involves deriving patterns or mappings from available input-output examples. The lecture illustrates this dis",
+    "tags": [
+      "Memorization",
+      "Machine Learning",
+      "Pattern Learning"
+    ]
+  },
+  {
+    "type": "question",
+    "moduleSlug": "system-thinking-for-ai",
+    "dayNumber": 1,
+    "labId": "q-what-three-fundamental-capabilities-does",
+    "title": "What three fundamental capabilities does the lecture emphasize for becoming a competent AI professional?",
+    "snippet": "The lecture emphasizes Competence, Commitment and Communication. Competence involves understanding and implementing concepts from scratch, commitment involves consistently practising and improving, an",
+    "tags": [
+      "Competence",
+      "Commitment",
+      "Communication"
+    ]
+  }
+]

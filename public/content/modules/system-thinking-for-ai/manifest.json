@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "updatedAt": "2026-11-08T06:45:11.588124+00:00",
+  "slug": "system-thinking-for-ai",
+  "title": "System thinking for AI",
+  "subtitle": "Foundation Session",
+  "description": "",
+  "courseCode": "",
+  "days": [
+    {
+      "number": 1,
+      "title": "Day 1",
+      "subtitle": "",
+      "hasSummary": true,
+      "transcriptCount": 2,
+      "linkCount": 0,
+      "boardCount": 1,
+      "questionCount": 15
+    }
+  ],
+  "labs": [],
+  "labCategories": [
+    {
+      "slug": "hands-on",
+      "label": "Hands-On Labs"
+    }
+  ]
+}

@@ -1,0 +1,231 @@
+{
+  "number": 1,
+  "title": "Day 1",
+  "subtitle": "",
+  "description": "",
+  "recap": "Today's foundation session focused on Critical Thinking and Systems Thinking as the two essential foundations for becoming an effective AI professional. The class explored how to question assumptions, validate information, understand systems through inputs, outputs and feedback loops, distinguish controllable and uncontrollable variables, and understand how Machine Learning derives patterns from data. The key takeaway is to develop the ability to build, dismantle, assemble, experiment with and control AI systems rather than blindly depending on AI tools.\n",
+  "transcripts": [
+    {
+      "id": "t-1",
+      "order": 1,
+      "title": "Transcript 1",
+      "file": {
+        "path": "modules/system-thinking-for-ai/days/day-01/transcripts/transcript-1.docx",
+        "format": "docx",
+        "sizeBytes": 41654,
+        "hash": "781d85d9d5",
+        "updatedAt": "2026-11-08T06:44:06.608901+00:00"
+      }
+    },
+    {
+      "id": "t-2",
+      "order": 2,
+      "title": "Transcript 2",
+      "file": {
+        "path": "modules/system-thinking-for-ai/days/day-01/transcripts/transcript-2.docx",
+        "format": "docx",
+        "sizeBytes": 49697,
+        "hash": "6a97e3f1cd",
+        "updatedAt": "2026-11-08T06:44:28.801883+00:00"
+      }
+    }
+  ],
+  "links": [],
+  "boards": [
+    {
+      "id": "b-1",
+      "caption": "Board Work 1",
+      "width": 1600,
+      "height": 1200,
+      "image": {
+        "path": "modules/system-thinking-for-ai/days/day-01/boards/board-1.webp",
+        "format": "webp",
+        "sizeBytes": 47136,
+        "hash": "a3592c4d78",
+        "updatedAt": "2026-11-08T06:44:49.860859+00:00"
+      },
+      "thumb": {
+        "path": "modules/system-thinking-for-ai/days/day-01/boards/thumbs/board-1.webp",
+        "format": "webp",
+        "sizeBytes": 6342,
+        "hash": "0f9c99a7e5",
+        "updatedAt": "2026-11-08T06:44:49.860859+00:00"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-what-is-critical-thinking-and-why-is-it-",
+      "question": "What is Critical Thinking, and why is it important in Artificial Intelligence?",
+      "answer": "Critical thinking is the ability to question assumptions, ask uncomfortable questions, examine evidence and validate whether information or conclusions are correct. It is essential in AI because professionals must independently evaluate AI-generated outputs rather than blindly accepting them.",
+      "explanation": "Imagine ChatGPT gives you an answer. Instead of immediately believing it, you question it, verify the information and check whether it is correct.",
+      "tags": [
+        "Critical Thinking",
+        "Artificial Intelligence",
+        "Validation"
+      ]
+    },
+    {
+      "id": "q-what-is-the-difference-between-belief-an",
+      "question": "What is the difference between Belief and Knowledge?",
+      "answer": "Belief is accepting something without sufficient validation, whereas knowledge involves understanding and verification. The lecture emphasizes that information without validation remains a belief.",
+      "explanation": "Someone tells you that a particular restaurant serves the best food. That is a belief until you experience it and verify whether it is actually good.",
+      "tags": [
+        "Knowledge",
+        "Belief",
+        "Validation"
+      ]
+    },
+    {
+      "id": "q-what-is-systems-thinking-and-how-does-it",
+      "question": "What is Systems Thinking, and how does it complement Critical Thinking?",
+      "answer": "Systems thinking involves understanding how different components, inputs, outputs and relationships interact within an overall system. Critical thinking helps identify flaws, question assumptions and validate whether the system is functioning correctly.",
+      "explanation": "Consider a car that refuses to start. Systems thinking helps you examine its different components, while critical thinking helps you question and test what is actually causing the problem.",
+      "tags": [
+        "Systems Thinking",
+        "Critical Thinking",
+        "Problem Solving"
+      ]
+    },
+    {
+      "id": "q-what-is-a-system-according-to-the-lectur",
+      "question": "What is a System according to the lecture?",
+      "answer": "A system consists of inputs, internal processing and outputs. The objective is to understand the mapping between the inputs provided and the outputs produced.",
+      "explanation": "A calculator is a simple system. You enter two numbers, it processes them through a calculation and produces an answer.",
+      "tags": [
+        "Systems Fundamentals",
+        "Input",
+        "Output"
+      ]
+    },
+    {
+      "id": "q-what-is-an-open-system",
+      "question": "What is an Open System?",
+      "answer": "An open system receives inputs and produces outputs, while its internal processing may not be directly known or understood. Understanding the relationship between inputs and outputs is essential when studying such systems.",
+      "explanation": "Imagine submitting an application to a company. You provide your details and receive a selection result, but you may not know exactly what happens inside the company's decision-making process.",
+      "tags": [
+        "Open Systems",
+        "Input",
+        "Output"
+      ]
+    },
+    {
+      "id": "q-what-is-a-closed-system-and-how-does-fee",
+      "question": "What is a Closed System, and how does feedback work in it?",
+      "answer": "A closed system incorporates feedback into its operation, allowing subsequent actions to change based on the resulting condition. The lecture uses drinking water as an example, where reduced thirst provides feedback to decrease or stop drinking.",
+      "explanation": "Imagine drinking water when you are thirsty. As your thirst decreases, you naturally drink less until you no longer need water.",
+      "tags": [
+        "Closed Systems",
+        "Feedback Loops",
+        "Systems Thinking"
+      ]
+    },
+    {
+      "id": "q-why-is-feedback-important-when-designing",
+      "question": "Why is feedback important when designing or understanding a system?",
+      "answer": "Feedback provides information about the consequences of a system's actions and helps determine whether its objective has been achieved. It also helps identify missing factors and improve the system model.",
+      "explanation": "Imagine studying for an examination without checking your answers. Practice tests provide feedback about what you understand and what you still need to improve.",
+      "tags": [
+        "Feedback Mechanism",
+        "System Design",
+        "Evaluation"
+      ]
+    },
+    {
+      "id": "q-how-can-an-abstract-feeling-like-satisfa",
+      "question": "How can an abstract feeling like satisfaction be broken down into measurable factors?",
+      "answer": "The lecture explains that an abstract feeling should be examined through more specific indicators. In the drinking-water example, dry throat, stomach fullness and sweating are considered factors that provide feedback about the body's condition.",
+      "explanation": "Instead of simply saying that you are satisfied after drinking water, examine whether your throat is still dry or your stomach feels full.",
+      "tags": [
+        "Systems Thinking",
+        "Feedback",
+        "Measurement"
+      ]
+    },
+    {
+      "id": "q-what-is-the-difference-between-controlla",
+      "question": "What is the difference between Controllable and Uncontrollable Variables?",
+      "answer": "Controllable variables are factors that can be deliberately adjusted within a system, whereas uncontrollable variables cannot be directly controlled. The lecture uses biryani preparation to demonstrate this distinction.",
+      "explanation": "When cooking biryani, you can control the quantity of rice and spices, but you cannot control the customer's personal preference for its aroma.",
+      "tags": [
+        "Controllable Variables",
+        "Uncontrollable Variables",
+        "Context"
+      ]
+    },
+    {
+      "id": "q-what-is-context-in-systems-thinking-and-",
+      "question": "What is Context in Systems Thinking, and why does it matter?",
+      "answer": "Context refers to the surrounding conditions or state that influence a system and its outcomes. The lecture emphasizes that understanding context is essential because the same system or action can produce different results under different conditions.",
+      "explanation": "Imagine two students studying for the same number of hours. One is well-rested, while the other is sleepy. Their performance may differ because their physical conditions are different.",
+      "tags": [
+        "Context",
+        "Systems Thinking",
+        "Decision Making"
+      ]
+    },
+    {
+      "id": "q-how-does-machine-learning-derive-an-algo",
+      "question": "How does Machine Learning derive an algorithm from data?",
+      "answer": "Machine Learning identifies patterns and relationships between available input data and corresponding output data to derive a mapping. This learned mapping can then be used to determine outputs for new inputs.",
+      "explanation": "Imagine showing someone several examples of the front and back of an object. After observing the examples, they learn to distinguish between the two without being explicitly given every identification rule.",
+      "tags": [
+        "Machine Learning",
+        "Pattern Recognition",
+        "Algorithms"
+      ]
+    },
+    {
+      "id": "q-why-does-the-lecture-emphasize-experimen",
+      "question": "Why does the lecture emphasize experimentation and failing early when developing AI systems?",
+      "answer": "Experimentation helps validate assumptions, identify errors and improve system performance through actual results rather than relying on hope. The instructor emphasizes experimenting frequently, failing early and learning from failures.",
+      "explanation": "Instead of spending months building an application before testing it, develop a small version, test it, identify problems and improve it continuously.",
+      "tags": [
+        "Experimentation",
+        "AI Development",
+        "Validation"
+      ]
+    },
+    {
+      "id": "q-why-should-ai-professionals-understand-h",
+      "question": "Why should AI professionals understand how AI systems work instead of blindly relying on AI tools?",
+      "answer": "AI professionals must understand how systems are built and how their components work so they can evaluate and control their behaviour. The lecture emphasizes the approach of building, dismantling and assembling systems.",
+      "explanation": "Using an AI tool without understanding how it works is like operating a machine without knowing what its different components do. You may use it, but you cannot confidently identify or fix problems.",
+      "tags": [
+        "AI Systems",
+        "System Control",
+        "AI Engineering"
+      ]
+    },
+    {
+      "id": "q-what-is-the-difference-between-memorizat",
+      "question": "What is the difference between Memorization and learning patterns through Machine Learning?",
+      "answer": "Memorization involves reproducing previously learned information, whereas Machine Learning involves deriving patterns or mappings from available input-output examples. The lecture illustrates this distinction through reproducing a familiar story versus creating a new story using two given words.",
+      "explanation": "Memorization is repeating a story exactly as someone told it. Learning patterns is understanding how stories are constructed well enough to create a new story using unfamiliar words.",
+      "tags": [
+        "Memorization",
+        "Machine Learning",
+        "Pattern Learning"
+      ]
+    },
+    {
+      "id": "q-what-three-fundamental-capabilities-does",
+      "question": "What three fundamental capabilities does the lecture emphasize for becoming a competent AI professional?",
+      "answer": "The lecture emphasizes Competence, Commitment and Communication. Competence involves understanding and implementing concepts from scratch, commitment involves consistently practising and improving, and communication involves expressing ideas effectively.",
+      "explanation": "Knowing how to build an AI model demonstrates competence, consistently improving it demonstrates commitment, and explaining your model to others demonstrates communication.",
+      "tags": [
+        "Competence",
+        "Commitment",
+        "Communication"
+      ]
+    }
+  ],
+  "updatedAt": "2026-11-08T06:45:11.587626+00:00",
+  "summary": {
+    "path": "modules/system-thinking-for-ai/days/day-01/summary.docx",
+    "format": "docx",
+    "sizeBytes": 2393164,
+    "hash": "10248296fd",
+    "updatedAt": "2026-11-08T06:43:48.496054+00:00"
+  }
+}

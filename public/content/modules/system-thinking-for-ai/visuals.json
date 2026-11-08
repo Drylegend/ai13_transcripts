@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "updatedAt": "2026-11-08T06:44:52.151743+00:00",
+  "items": [
+    {
+      "id": "system-thinking-for-ai-d1-b-1",
+      "type": "board",
+      "dayNumber": 1,
+      "caption": "Board Work 1",
+      "image": {
+        "path": "modules/system-thinking-for-ai/days/day-01/boards/board-1.webp",
+        "format": "webp",
+        "sizeBytes": 47136,
+        "hash": "a3592c4d78",
+        "updatedAt": "2026-11-08T06:44:49.860859+00:00"
+      },
+      "thumb": {
+        "path": "modules/system-thinking-for-ai/days/day-01/boards/thumbs/board-1.webp",
+        "format": "webp",
+        "sizeBytes": 6342,
+        "hash": "0f9c99a7e5",
+        "updatedAt": "2026-11-08T06:44:49.860859+00:00"
+      },
+      "width": 1600,
+      "height": 1200,
+      "addedAt": "2026-11-08T06:44:49.860859+00:00"
+    }
+  ]
+}
