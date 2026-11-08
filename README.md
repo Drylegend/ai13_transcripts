@@ -2,22 +2,19 @@
 
 A modern, static, zero-backend course notes portal for multiple AI-13 course modules. Each module contains daily summaries, transcripts, important links, class board work photos, Q&A sections, labs, and visual notes.
 
-> 📖 **Content Upload Guide**: For step-by-step instructions on uploading course documents and managing content via the CLI, read the comprehensive [HOW_TO_USE.md](file:///d:/ai13_module/HOW_TO_USE.md).
+> 📖 **Complete Content & Setup Guide**: For full step-by-step instructions on setting up Cloudflare Pages (zero card needed), uploading course documents, daily checklists, and command reference, read [HOW_TO_USE.md](file:///d:/ai13_module/HOW_TO_USE.md).
 
 ## Architecture
 
 ```
-┌──────────────────────┐     ┌─────────────────────┐
-│  Cloudflare Pages    │────▶│  Cloudflare R2      │
-│  (static SPA)        │     │  (content storage)  │
-│                      │     │                     │
-│  - React 19 + Vite   │     │  - manifest.json    │
-│  - Tailwind CSS v4   │     │  - docx, PDF, ipynb │
-│  - Client-side only  │     │  - images (webp)    │
-└──────────────────────┘     └─────────────────────┘
+┌────────────────────────┐      ┌────────────────────────┐      ┌────────────────────────┐
+│     Your Computer      │      │      Git / GitHub      │      │   Cloudflare Pages     │
+│  (python ingest.py)    │ ───► │  (public/content/)     │ ───► │  (Fast Web Frontend)   │
+│ Ingests 1 item at time │      │ Holds docs & manifests │      │ Readers browse portal  │
+└────────────────────────┘      └────────────────────────┘      └────────────────────────┘
 ```
 
-The site is a fully static SPA deployed on Cloudflare Pages. All heavy content (documents, notebooks, images) lives in Cloudflare R2 and is fetched lazily at runtime via small `manifest.json` descriptor files.
+The site is a fully static SPA deployed on Cloudflare Pages with zero card required. Content lives directly in `public/content/` (served at `/content` in dev and bundled into `dist/content` on build), published via `python ingest.py publish`. External Cloudflare R2 object storage is supported as an optional upgrade for massive archives.
 
 ## Tech Stack
 

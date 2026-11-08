@@ -201,14 +201,14 @@ class IngestCLI:
 
         index_data, _ = self.storage.get_json("index.json")
 
+        if self.dry_run:
+            console.print("[yellow]Dry-run mode: would create index.json ({version: 1, modules: []}) and search-index.json ([]).[/yellow]")
+            return True
+
         if index_data is not None and not self.auto_yes and not silent:
             if not questionary.confirm("index.json already exists in target storage. Re-initialize to empty slate?").ask():
                 console.print("[yellow]Initialization cancelled.[/yellow]")
                 return False
-
-        if self.dry_run:
-            console.print("[yellow]Dry-run mode: would create index.json ({version: 1, modules: []}) and search-index.json ([]).[/yellow]")
-            return True
 
         now_iso = datetime.now(timezone.utc).isoformat()
         empty_index = {
@@ -2135,6 +2135,10 @@ def main() -> None:
                 uploaded_keys = cs_data.get("uploaded_keys", [])
             except Exception:
                 pass
+
+        if cli.dry_run:
+            console.print("[yellow]Dry-run mode: would restore this backup and delete newly uploaded files. No changes written.[/yellow]")
+            return
 
         if cli.auto_yes or questionary.confirm("Restore this backup and revert the last operation?").ask():
             # 1. Delete newly uploaded files
