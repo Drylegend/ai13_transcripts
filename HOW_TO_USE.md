@@ -11,15 +11,16 @@ Welcome to the **Race | AI 13 | Transcripts & Summary** portal content managemen
 4. [First-Time Cloudflare Workers Static Assets Deployment (No Card)](#4-first-time-cloudflare-workers-static-assets-deployment-no-card)
 5. [Preparing Documents Before Upload](#5-preparing-documents-before-upload)
 6. [First Walkthrough: Ingest Your First Module & Publish](#6-first-walkthrough-ingest-your-first-module--publish)
-7. [The Questions File & AI Prompt Generator](#7-the-questions-file--ai-prompt-generator)
-8. [Daily After-Class Workflow Checklist](#8-daily-after-class-workflow-checklist)
-9. [Fixing Mistakes: Overwrite, Remove, Undo, Verify & Rebuild](#9-fixing-mistakes-overwrite-remove-undo-verify--rebuild)
-10. [Practice Safely: Dry-Run and Local Sandbox](#10-practice-safely-dry-run-and-local-sandbox)
-11. [Student Reader's Portal Guide](#11-student-readers-portal-guide)
-12. [Storage, Limits & Housekeeping](#12-storage-limits--housekeeping)
-13. [Troubleshooting Guide](#13-troubleshooting-guide)
-14. [Optional: Upgrading to Cloudflare R2 Later](#14-optional-upgrading-to-cloudflare-r2-later)
-15. [One-Page Quick Reference Card](#15-one-page-quick-reference-card)
+7. [The Questions File & Format Guide](#7-the-questions-file--format-guide)
+8. [Getting Questions from ChatGPT or Another AI](#8-getting-questions-from-chatgpt-or-another-ai)
+9. [Daily After-Class Workflow Checklist](#9-daily-after-class-workflow-checklist)
+10. [Fixing Mistakes: Overwrite, Remove, Undo, Verify & Rebuild](#10-fixing-mistakes-overwrite-remove-undo-verify--rebuild)
+11. [Practice Safely: Dry-Run and Local Sandbox](#11-practice-safely-dry-run-and-local-sandbox)
+12. [Student Reader's Portal Guide](#12-student-readers-portal-guide)
+13. [Storage, Limits & Housekeeping](#13-storage-limits--housekeeping)
+14. [Troubleshooting Guide](#14-troubleshooting-guide)
+15. [Optional: Upgrading to Cloudflare R2 Later](#15-optional-upgrading-to-cloudflare-r2-later)
+16. [One-Page Quick Reference Card](#16-one-page-quick-reference-card)
 
 ---
 
@@ -50,6 +51,7 @@ All curriculum content is organized hierarchically:
 Course Portal
   ├── Module (e.g., MLOps Associate - AI-300)
   │     ├── Day 1
+  │     │     ├── In a nutshell (2-3 sentence executive recap entered during create-day)
   │     │     ├── Summary (DOCX, Markdown, PDF, or HTML)
   │     │     ├── Transcripts (Ordered lecture transcripts: Part 1, Part 2...)
   │     │     ├── Important Links (Official docs, GitHub repos, cheat sheets)
@@ -66,6 +68,7 @@ Course Portal
 
 - **Module**: A major course subject with title, course code (e.g. `AI-300`), subtitle, and description.
 - **Day**: A single class session. Days can be non-contiguous (e.g. Day 1, Day 2, Day 5).
+- **In a nutshell Recap**: A 2–3 sentence executive recap of the day's key concepts. This is entered when creating the day in `create-day`.
 - **Summary**: The primary reading material for that day. One summary per day.
 - **Transcripts**: Multiple ordered lecture transcripts per day (e.g. "Morning Session", "Afternoon Session").
 - **Important Links**: External resource URLs with labels and optional descriptions.
@@ -89,7 +92,7 @@ Course Portal
   ```
 
 ### Step 2: Install Python Dependencies
-In the root directory of the repository (`d:\ai13_module`):
+In the root directory of your project repository:
 ```bash
 pip install -r requirements.txt
 ```
@@ -114,15 +117,15 @@ To allow `python ingest.py publish` to push commits to GitHub, your computer mus
      ```bash
      gh auth login
      ```
-  3. Select **GitHub.com** $\rightarrow$ **HTTPS** $\rightarrow$ **Yes** (authenticate Git with your GitHub credentials) $\rightarrow$ **Login with a web browser**.
+  3. Select **GitHub.com** → **HTTPS** → **Yes** (authenticate Git with your GitHub credentials) → **Login with a web browser**.
   4. Enter the one-time code shown in your terminal into the browser and approve access.
 
 - **Option B (Git Credential Manager / Personal Access Token)**:
-  1. Go to GitHub $\rightarrow$ **Settings** $\rightarrow$ **Developer settings** $\rightarrow$ **Personal access tokens (Tokens classic)**.
+  1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens (Tokens classic)**.
   2. Generate a token with the `repo` scope.
   3. When you run `git push` for the first time, Git will prompt for your username and password. Enter your GitHub username and paste the personal access token as the password. Windows Git Credential Manager will remember it.
 
-### Step 5: Initialize Content Repository Bootstrap Files
+### Step 5: Initialize Content Repository Bootstrap Files & Push to GitHub
 Run:
 ```bash
 python ingest.py init
@@ -139,8 +142,13 @@ python ingest.py init
 Committed bootstrap files to git repository.
 Successfully initialized repository bootstrap files: index.json and search-index.json
 ```
+
+Now push the newly committed starter files to GitHub once:
+```bash
+git push origin main
+```
 > [!NOTE]
-> `python ingest.py init` creates empty starter files `public/content/index.json` and `public/content/search-index.json` and commits them to Git. They go live on your site after you run `python ingest.py publish` or push to GitHub.
+> `python ingest.py init` creates empty starter files `public/content/index.json` and `public/content/search-index.json` and commits them locally. Running `git push origin main` ensures your starter content files are published to GitHub before your first Cloudflare deployment.
 
 ---
 
@@ -166,7 +174,7 @@ Configure the project with these exact settings:
 | **Environment variables** | *None* | Zero environment variables are required! |
 
 ### Step 3: Configuration via `wrangler.jsonc`
-The repository includes a committed [wrangler.jsonc](file:///d:/ai13_module/wrangler.jsonc) file in the root directory:
+The repository includes a committed [wrangler.jsonc](wrangler.jsonc) file in the root directory:
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -179,14 +187,14 @@ The repository includes a committed [wrangler.jsonc](file:///d:/ai13_module/wran
 }
 ```
 - `assets.directory: "./dist"` instructs Cloudflare to serve the compiled frontend.
-- `assets.not_found_handling: "single-page-application"` enables client-side SPA routing automatically so direct links (e.g. `/m/module-slug/day/1`) load without 404s.
+- `assets.not_found_handling: "single-page-application"` enables client-side SPA routing automatically so direct links (e.g. `/m/module-slug/day/1`) load without 404 errors on refresh.
 
 > [!CAUTION]
 > **Do NOT create `public/_redirects`!**
 > There must be **NO `public/_redirects` file** in the repository. In Cloudflare Workers Static Assets, a `_redirects` file conflicts with the `not_found_handling: "single-page-application"` setting and causes an **infinite loop deployment error**. SPA routing is already fully handled by `wrangler.jsonc`.
 
 ### Step 4: Node.js 22 Verification
-Cloudflare Workers builds respect the [`.node-version`](file:///d:/ai13_module/.node-version) file present in the repository root.
+Cloudflare Workers builds respect the [`.node-version`](.node-version) file present in the repository root.
 The repository already includes `.node-version` containing `22`:
 ```bash
 cat .node-version
@@ -213,14 +221,14 @@ Follow these guidelines for clean, professional uploads:
 
 1. **Word Documents (`.docx`, not `.doc`)**:
    - The in-browser viewer renders modern OpenXML `.docx` files natively.
-   - If you have an older `.doc` file, open it in Microsoft Word or LibreOffice and click **Save As $\rightarrow$ Word Document (.docx)**. The CLI automatically rejects `.doc` files to prevent broken viewers.
+   - If you have an older `.doc` file, open it in Microsoft Word or LibreOffice and click **Save As → Word Document (.docx)**. The CLI automatically rejects legacy `.doc` files to prevent broken viewers.
 2. **One File Per Upload**:
    - The CLI strictly processes **one item at a time**.
    - Do **not** drag multiple files or zip archives into the picker. The tool validates individual file size, content hash, and placement.
 3. **File Size Guidance**:
    - Standard documents (`.docx`, `.md`, `.pdf`, `.ipynb`) are typically 50 KB – 5 MB.
-   - Files $>10\text{ MiB}$ trigger a warning.
-   - Files $>25\text{ MiB}$ are **rejected** because Cloudflare has a strict 25 MiB single-file limit for static assets.
+   - Files >10 MiB trigger a warning.
+   - Files >25 MiB are **rejected** because Cloudflare has a strict 25 MiB single-file limit for static assets.
 4. **File Naming Suggestions**:
    - Use clear, kebab-case or readable names: `day01-intro-mlops.docx`, `whiteboard-pipeline-arch.png`.
    - The CLI sanitizes filenames and generates clean URL keys automatically.
@@ -284,11 +292,20 @@ Prompts and example inputs:
 ```
 ? Select module: Machine Learning Operations Associate (mlops-associate)
 ? Day Number: 1
-? Day Title: Day 1: Introduction to MLOps
+? Day Title: Introduction to MLOps
 ? Subtitle: Foundations & Azure Machine Learning Architecture
 ? Description: Overview of the MLOps lifecycle, workspaces, and compute targets.
 ? In a nutshell / class recap: We explored why MLOps is required for repeatable AI delivery and set up our Azure ML workspace.
 ```
+
+> [!WARNING]
+> **Do not type "Day 1:" or "Day N:" in the Day Title prompt!**
+> The portal UI and CLI automatically prefix the day number (`Day 1: <Your Title>`). Typing `"Day 1: Introduction to MLOps"` will cause the site to display `"Day 1: Day 1: Introduction to MLOps"`. Enter only `"Introduction to MLOps"`.
+
+> [!TIP]
+> **Updating Day Meta & Recap:**
+> The "In a nutshell" recap is entered right here during `create-day`. If you ever want to update the title, subtitle, description, or the recap later, simply re-run `create-day` with the same Day number (e.g., `1`). The CLI will prompt: `Day 1 already exists in this module. Update its meta?` Press **Yes** to modify any field.
+
 *Output:*
 ```
 Plan:
@@ -308,11 +325,11 @@ Select:
 Prompts:
 ```
 ? Select module: Machine Learning Operations Associate (mlops-associate)
-? Select course day: Day 1: Day 1: Introduction to MLOps
+? Select course day: Day 1: Introduction to MLOps
 ```
-The file dialog opens (or you type the path):
+The file dialog opens (or you type the relative path):
 ```
-Select Day Summary (.docx, .md, .html, .pdf): C:\Users\Utsav\Documents\day1_summary.docx
+Select Day Summary (.docx, .md, .html, .pdf): ./source-docs/day1_summary.docx
 ```
 *Output:*
 ```
@@ -333,8 +350,8 @@ Select:
 Prompts:
 ```
 ? Select module: Machine Learning Operations Associate (mlops-associate)
-? Select course day: Day 1: Day 1: Introduction to MLOps
-Select Transcript (.docx, .md, .txt): C:\Users\Utsav\Documents\day1_part1.docx
+? Select course day: Day 1: Introduction to MLOps
+Select Transcript (.docx, .md, .txt): ./source-docs/day1_part1.docx
 ? Transcript Title: Morning Lecture - MLOps Principles
 ? Order in Day: 1
 ```
@@ -342,7 +359,7 @@ Repeat for Part 2:
 ```
 ? What would you like to ingest or create?
   add transcript
-Select Transcript (.docx, .md, .txt): C:\Users\Utsav\Documents\day1_part2.docx
+Select Transcript (.docx, .md, .txt): ./source-docs/day1_part2.docx
 ? Transcript Title: Afternoon Walkthrough - Azure ML Setup
 ? Order in Day: 2
 ```
@@ -358,7 +375,7 @@ Select:
 Prompts:
 ```
 ? Select module: Machine Learning Operations Associate (mlops-associate)
-? Select course day: Day 1: Day 1: Introduction to MLOps
+? Select course day: Day 1: Introduction to MLOps
 ? Link Label: Azure Machine Learning Documentation
 ? Target URL (https://...): https://learn.microsoft.com/azure/machine-learning
 ? Description (optional): Official Microsoft reference architecture guide
@@ -379,8 +396,8 @@ Select:
 Prompts:
 ```
 ? Select module: Machine Learning Operations Associate (mlops-associate)
-? Select course day: Day 1: Day 1: Introduction to MLOps
-Select Questions File (.md): C:\Users\Utsav\Documents\day1_questions.md
+? Select course day: Day 1: Introduction to MLOps
+Select Questions File (.md): ./source-docs/day1_questions.md
 ```
 *Output:*
 ```
@@ -423,7 +440,7 @@ Open your live `.workers.dev` URL in ~60 seconds to see Day 1 live!
 
 ---
 
-## 7. The Questions File & AI Prompt Generator
+## 7. The Questions File & Format Guide
 
 Each day includes a self-study quiz section. Questions are authored in clean, simple Markdown.
 
@@ -447,6 +464,12 @@ Save your file as `questions.md`:
 **Tags:** MLflow, Tracking, Storage
 ```
 
+### Key Formatting Rules
+1. Every question heading must begin with `## Q<number>: <Question text>`.
+2. `**Answer:**` is required on the very next line.
+3. `**Explain simply:**` provides an optional, beginner-friendly intuition analogy.
+4. `**Tags:**` provides optional comma-separated topic tags used for filtering in the UI.
+
 ### Generate a Starter Template
 Generate a ready-to-fill template file anytime by running:
 ```bash
@@ -456,8 +479,12 @@ python ingest.py questions-template
 
 ---
 
-### AI Prompt: Generate Recap + 10 Questions from Transcripts
-Copy and paste this prompt into Claude, ChatGPT, or Gemini along with your raw class transcript:
+## 8. Getting Questions from ChatGPT or Another AI
+
+You can easily generate the class recap and all self-study questions directly from your lecture transcript using ChatGPT, Claude, or Gemini.
+
+### The AI Generation Prompt
+Copy and paste this exact prompt into your AI model along with your class transcript:
 
 ````text
 You are an expert technical curriculum designer. I am providing you with today's class lecture transcript. Please analyze the transcript and generate two items:
@@ -466,31 +493,45 @@ ITEM 1: "In a Nutshell" (Class Recap)
 Write a 2-3 sentence executive summary explaining what was taught today, why it matters, and the core outcome.
 
 ITEM 2: Self-Study Quiz Questions (10-15 Questions)
-Generate 10 to 15 questions in the exact Markdown format shown below. For every question:
-1. "## Q<number>: <concise question>"
-2. "**Answer:** <technically accurate, 1-2 sentence direct answer>"
-3. "**Explain simply:** <a plain-English real-world analogy or beginner-friendly intuition>"
-4. "**Tags:** <2-4 comma-separated topic tags>"
+Generate 10 to 15 questions in the exact Markdown format shown below. Output the entire markdown inside a single raw markdown code block so it is easy to copy cleanly.
 
-EXAMPLE OUTPUT FORMAT:
+For every question follow this structure:
+## Q<number>: <concise question>
+**Answer:** <technically accurate, 1-2 sentence direct answer>
+**Explain simply:** <a plain-English real-world analogy or beginner-friendly intuition>
+**Tags:** <2-4 comma-separated topic tags>
+
+EXAMPLE FORMAT:
+```markdown
 ## Q1: Why use Azure ML Environments rather than bare virtual machines?
 **Answer:** Environments bundle operating system patches, Python interpreters, and library dependencies into reproducible Docker containers that run identically across local workstations and cloud clusters.
 **Explain simply:** Instead of re-baking a cake from scratch on every computer, an Environment is like buying pre-packaged frozen dough that bakes identically anywhere.
 **Tags:** Containers, Environments, Reproducibility
+```
 
 Here is the lecture transcript:
 [PASTE TRANSCRIPT HERE]
 ````
 
+### Best Practices When Generating with AI:
+1. **Always Request a Code Block**: Asking the AI to place the output inside a markdown code block ensures indentation and asterisks (`**Answer:**`) aren't lost or converted into rich text.
+2. **Use the One-Click Copy Button**: Click the copy icon in the top right of the AI's code block rather than dragging and selecting text with your mouse.
+3. **Save as UTF-8**: Paste the content into a text editor (VS Code or Notepad) and save as `dayNN_questions.md`. Ensure the file encoding is **UTF-8**.
+4. **Verify the First Line**: Double-check that the file begins directly with `## Q1:` (remove any intro chat from the AI like *"Here are your questions:"*).
+5. **Skim for Accuracy**: Briefly skim the answers to make sure the AI did not hallucinate commands or terminology.
+6. **Preventing Duplicates on Re-runs**:
+   > [!IMPORTANT]
+   > The ingest tool merges questions into Day storage by matching question text. If you regenerate questions with slightly different wording, the tool will treat them as new questions and append them! If you want to replace an existing set of questions, run `python ingest.py remove`, choose `questions`, and confirm removal before uploading the new set.
+
 ---
 
-## 8. Daily After-Class Workflow Checklist
+## 9. Daily After-Class Workflow Checklist
 
 Keep this quick 5-minute routine after every class session:
 
 - [ ] **Step 1 — Prepare your materials**:
-  - Save your lecture notes as `dayNN_summary.docx`.
-  - Save lecture transcripts as `dayNN_transcript_part1.docx`, etc.
+  - Save lecture notes as `dayNN_summary.docx`.
+  - Save transcripts as `dayNN_part1.docx`, `dayNN_part2.docx`...
   - Export whiteboard photos as `.png` or `.jpg`.
   - Run the AI prompt on your transcript to generate `dayNN_questions.md` and the 2-sentence recap.
 - [ ] **Step 2 — Open the Ingest Tool**:
@@ -498,7 +539,7 @@ Keep this quick 5-minute routine after every class session:
   python ingest.py
   ```
 - [ ] **Step 3 — Ingest Day items**:
-  - If Day doesn't exist yet: `create-day`.
+  - If Day doesn't exist yet: `create-day` (enter the title and the "In a nutshell" recap).
   - Add summary: `add/replace summary`.
   - Add transcripts: `add transcript` (Part 1, Part 2...).
   - Add whiteboard photos: `add board photo`.
@@ -515,7 +556,7 @@ Keep this quick 5-minute routine after every class session:
 
 ---
 
-## 9. Fixing Mistakes: Overwrite, Remove, Undo, Verify & Rebuild
+## 10. Fixing Mistakes: Overwrite, Remove, Undo, Verify & Rebuild
 
 ### A. Replacing an Existing File (Overwrite)
 If you edit a summary, transcript, or whiteboard image and re-upload it with the same target name:
@@ -523,14 +564,20 @@ If you edit a summary, transcript, or whiteboard image and re-upload it with the
 2. It prompts: `Are you sure you want to OVERWRITE this existing file?`
 3. Backs up the prior JSON file automatically before replacing.
 
-### B. Removing an Item (`remove`)
+### B. Updating Day Metadata & Recap
+If you need to change the title, subtitle, description, or the "In a nutshell" recap for an existing day:
+1. Run `python ingest.py` and choose `create-day`.
+2. Enter the same Day Number (e.g. `1`).
+3. The CLI prompts: `Day 1 already exists in this module. Update its meta?` Press **Yes** to update any of the text fields.
+
+### C. Removing an Item (`remove`)
 To delete a specific transcript, photo, link, question, or an entire day/module:
 ```bash
 python ingest.py remove
 ```
 Prompts you to select the item type and module, then asks you to **type the item name** to confirm deletion (preventing accidental clicks). It removes the file, updates `day.json`, regenerates search indices, and backs up state.
 
-### C. Reverting the Last Operation (`undo`)
+### D. Reverting the Last Operation (`undo`)
 If an upload was a mistake, undo it immediately:
 ```bash
 python ingest.py undo
@@ -543,11 +590,11 @@ Found latest backup: 20261108_042041_424
 ? Restore this backup and revert the last operation? Yes
   Deleted uploaded file: modules/mlops-fundamentals/days/day-01/summary.docx
   Restored manifest: modules/mlops-fundamentals/days/day-01/day.json
-  Restored manifest: modules/mlops-fundamentals/manifest.json
+  Restored manifest: modules/mlops-fundamentals/days/day-01/manifest.json
 Undo completed successfully!
 ```
 
-### D. Verifying Integrity (`verify`)
+### E. Verifying Integrity (`verify`)
 Audit all JSON files, schema validity, and file sizes across storage:
 ```bash
 python ingest.py verify
@@ -557,13 +604,13 @@ Or verify a single module:
 python ingest.py verify --module mlops-associate
 ```
 
-### E. Rebuilding Manifests & Search Indices (`rebuild-index`)
+### F. Rebuilding Manifests & Search Indices (`rebuild-index`)
 If you ever edit a JSON file manually or want to regenerate all derived counters, whiteboard galleries, and search entries:
 ```bash
 python ingest.py rebuild-index
 ```
 
-### F. Viewing the Content Tree (`list`)
+### G. Viewing the Content Tree (`list`)
 Inspect all modules, days, labs, and pending publish count:
 ```bash
 python ingest.py list
@@ -571,7 +618,7 @@ python ingest.py list
 
 ---
 
-## 10. Practice Safely: Dry-Run and Local Sandbox
+## 11. Practice Safely: Dry-Run and Local Sandbox
 
 ### Option 1: Dry-Run Mode (`--dry-run`)
 Add `--dry-run` to any command to see the exact plan without modifying any files:
@@ -601,36 +648,63 @@ python ingest.py list --target local
 
 ---
 
-## 11. Student Reader's Portal Guide
+## 12. Student Reader's Portal Guide
 
-Share these tips with your students:
+Here is an overview of how students navigate and use the live portal UI:
 
 1. **Module & Day Navigation**:
-   - The left sidebar lists all available modules. Clicking a module expands its days in order.
-   - On mobile devices, tap the hamburger icon in the top header to open the navigation drawer.
-2. **Day View Tabs**:
-   - **Summary**: Read the core class document with in-browser DOCX, Markdown, or PDF rendering, zoom controls, and direct download.
-   - **Transcripts**: Browse full class transcripts. Use the segment dropdown to switch between lecture parts.
-   - **Important Links**: Access documentation links, notebooks, and reference materials.
-   - **Class Board Work**: High-resolution whiteboard captures. Click any photo to open the interactive lightbox.
-   - **Questions**: Review interactive quiz cards. Click **Explain simply** to see intuition analogies; filter by tag.
-3. **Command Palette Search (`Ctrl + K` or `Cmd + K`)**:
-   - Press `Ctrl + K` anywhere on the site.
-   - Instantly search through summaries, transcripts, whiteboard captions, and quiz questions with live keyboard navigation.
-4. **Marking Progress**:
-   - Check the **Understood** or **Mark as Read** checkbox on each Day and Lab.
-   - Progress is saved in the browser's local storage and reflected in module progress bars.
-5. **Progress & Backup Modal**:
-   - Click the **Progress & Backup** button in the top navigation.
-   - View completed day statistics.
-   - Click **Export Progress** to download a small JSON backup file.
-   - Moving to a new laptop or phone? Click **Import Progress** on the new device to restore completion states.
-6. **Dark Mode Toggle**:
-   - Click the theme toggle icon in the top header to switch between crisp light mode and eye-friendly dark mode.
+   - The left sidebar lists all published modules in accordion format.
+   - Expanding a module lists its Days with status icons and item count chips.
+   - On mobile screens (< 1024px), tap the **hamburger menu button** in the top-left header to open the slide-in sidebar drawer.
+2. **Day Header Card**:
+   - Prominently displays the day number badge (e.g., `01`), title, subtitle, and an executive **"In a nutshell"** recap card.
+3. **Day View Tabs**:
+   - **Summary Tab**:
+     - Action bar at top features a **Mark as Read** toggle button and a **Download Summary** button.
+     - Document viewer renders `.docx`, `.md`, `.pdf`, and `.html`.
+     - When viewing Word documents (`.docx`), viewer controls include **Zoom Out** (`-`), current zoom percentage (e.g. `100%`), and **Zoom In** (`+`) (scaling from 70% to 150%).
+   - **Transcripts Tab**:
+     - Displays all lecture parts as clean, expandable cards with sequence badges (`01`, `02`...), title, filename, and size.
+     - Each transcript card includes:
+       - **Mark Read** / **Read** toggle button.
+       - **Download** button.
+       - **Click to Read** / **Hide Reader** button that expands the inline document reader directly underneath.
+     - Multiple transcripts can be expanded simultaneously for easy reading.
+   - **Important Links Tab**:
+     - Cards showing resource title, external URL, and optional description with external-link indicators.
+   - **Class Board Work Tab**:
+     - Responsive thumbnail grid of classroom whiteboard photos.
+     - Clicking any photo opens the full-screen interactive **Lightbox** with zoom, pan, photo captions, and prev/next navigation.
+   - **Questions Tab**:
+     - Self-study quiz cards with sequence tiles (`Q1`, `Q2`), question text, and topic tags.
+     - Filter questions by topic using the interactive tag chips at the top.
+     - Each card has an **Understood?** / **Understood** checkmark button for personal study tracking.
+     - Clicking anywhere on a question card expands it to reveal:
+       - **Direct Answer** block.
+       - **Explain It Simply (Beginner-Friendly)** block with intuition analogies.
+4. **Labs Section**:
+   - Accessed from the sidebar or `/m/<module>/labs`.
+   - Cards display category chips (`hands-on`, `assessment`, `challenge`), title, and a **StatusBadge** (`Not Started`, `In Progress`, `Done`).
+   - Click the status cycle button (circular arrow icon) to quickly cycle the lab status (`Not Started` → `In Progress` → `Done`).
+   - The full Lab Detail page displays the official lab guide link, ingested notes viewer, architecture diagrams with lightbox, and an auto-saving private notes scratchpad.
+5. **Visual Notes Section**:
+   - Single-page gallery aggregating all whiteboard photos and lab architecture doodles across the entire module.
+   - Filterable by type (All, Board Work, Lab Doodles).
+6. **Command Palette Search (`Ctrl + K` or `Cmd + K`)**:
+   - Click the search bar in the top header (or press `Ctrl + K` / `Cmd + K`, or tap the search icon on mobile).
+   - Instantly search through modules, days, summaries, transcripts, whiteboard captions, and quiz questions with live keyboard navigation.
+7. **Progress & Backup**:
+   - Click the **Database icon button** in the top-right header or the **Progress & Backup** button at the bottom of the left sidebar.
+   - View your overall module completion percentage.
+   - **Export Progress**: Downloads a portable `.json` backup file containing your completion checkmarks and lab statuses.
+   - **Import Progress**: Restores progress from a backup file on another device (with options to **Merge with Existing** or **Replace All**).
+   - **Reset All Progress**: Safely clears your local progress (requires typing `"RESET"`).
+8. **Dark Mode Toggle**:
+   - Click the Sun/Moon icon button in the top-right header to switch between light mode and dark mode.
 
 ---
 
-## 12. Storage, Limits & Housekeeping
+## 13. Storage, Limits & Housekeeping
 
 Check your current storage consumption anytime:
 ```bash
@@ -639,11 +713,11 @@ python ingest.py stats
 
 ### Cloudflare Workers Static Assets Free Tier Limits
 - **Monthly Build Minutes**: **3,000 build minutes/month** (roughly 1–2 minutes per publish, allowing 1,500–3,000 deploys every month).
-  *Static asset requests*: **Free and unlimited** across all Cloudflare global edge locations.
+- **Static Asset Requests**: **Free and unlimited** across all Cloudflare global edge locations.
 - **File Count**: **20,000 files maximum**.
   *The CLI warns at 70% (14,000 files) and alerts at 75% (15,000 files).*
 - **Single File Size**: **25 MiB maximum**.
-  *The CLI automatically rejects any file $>25\text{ MiB}$ and warns if $>10\text{ MiB}$.*
+  *The CLI automatically rejects any file >25 MiB and warns if >10 MiB.*
 
 ### Git Repository Housekeeping
 - When you update or remove files in `public/content/`, older versions remain in Git history. This is normal and provides a complete audit trail.
@@ -651,12 +725,12 @@ python ingest.py stats
 
 ---
 
-## 13. Troubleshooting Guide
+## 14. Troubleshooting Guide
 
 | Symptom | Cause | Solution |
 |---|---|---|
-| **Deploy fails with "Invalid _redirects / infinite loop"** | A `public/_redirects` file exists | **Delete `public/_redirects`**. In Cloudflare Workers Static Assets, `wrangler.jsonc` handles SPA routing via `not_found_handling: "single-page-application"`. A `_redirects` file creates a circular loop. |
-| **Build runs but Cloudflare changes my project settings** | Missing or uncommitted `wrangler.jsonc` | Ensure `wrangler.jsonc` is committed in the root of your Git repository so Cloudflare honors its settings. |
+| **Deploy fails with "Invalid _redirects / infinite loop"** | A `public/_redirects` file exists | **Delete `public/_redirects`**. Cloudflare Workers Static Assets uses `wrangler.jsonc` with `"not_found_handling": "single-page-application"` to handle SPA routing. Having a `_redirects` file creates a circular loop. |
+| **Build runs but Cloudflare changes my project settings** | Missing or uncommitted `wrangler.jsonc` | Ensure `wrangler.jsonc` is committed in the root of your Git repository so Cloudflare honors your configuration. |
 | **Cloudflare Workers build fails** | Old Node.js version used in build container | Verify `.node-version` file exists in repo root and contains `22`. Ensure Build command is `npm run build`. |
 | **Content not showing after publish** | Build still in progress or stale browser cache | 1. Check Cloudflare dashboard deployments tab.<br>2. Hard refresh your browser (`Ctrl + F5` or `Cmd + Shift + R`). |
 | **"Nothing to publish"** | No uncommitted changes in `public/content/` | You have already published all current content. Ingest new items before publishing. |
@@ -669,17 +743,17 @@ python ingest.py stats
 
 ---
 
-## 14. Optional: Upgrading to Cloudflare R2 Later
+## 15. Optional: Upgrading to Cloudflare R2 Later
 
-If your library grows beyond 15,000 files or you need to host large binary files ($>25\text{ MiB}$), you can upgrade to Cloudflare R2 storage without changing your folder layout:
+If your library grows beyond 15,000 files or you need to host large binary files (>25 MiB), you can upgrade to Cloudflare R2 storage without changing your folder layout:
 
 ### Step 1: Create an R2 Bucket
-1. In Cloudflare Dashboard, go to **R2** $\rightarrow$ **Create bucket** (e.g. `ai13-content`).
-2. Go to **Bucket Settings** $\rightarrow$ **Public Access** $\rightarrow$ Enable Custom Domain or Managed `r2.dev` URL.
-   *(Note: `r2.dev` public URLs have a Cloudflare rate limit of 10 requests/second intended for development; for production, connect a custom domain or your worker domain).*
+1. In Cloudflare Dashboard, go to **R2** → **Create bucket** (e.g. `ai13-content`).
+2. Go to **Bucket Settings** → **Public Access** → Enable Custom Domain or Managed `r2.dev` URL.
+   *(Note: `r2.dev` public URLs are rate-limited and intended for development; for production, connect a custom domain or your worker domain).*
 
 ### Step 2: Configure CORS on the R2 Bucket
-In bucket settings $\rightarrow$ **CORS Policy**, paste this JSON:
+In bucket settings → **CORS Policy**, paste this JSON:
 ```json
 [
   {
@@ -703,17 +777,19 @@ R2_ACCESS_KEY_ID=your_r2_access_key_id
 R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
 R2_BUCKET=ai13-content
 ```
-In your Cloudflare Pages / Workers Dashboard $\rightarrow$ **Settings** $\rightarrow$ **Environment variables**:
+In your Cloudflare Workers Dashboard → project **Settings** → **Build** → **Variables and Secrets**:
 ```env
 VITE_CONTENT_BASE_URL=https://your-r2-public-url.com
 ```
+> [!IMPORTANT]
+> `VITE_CONTENT_BASE_URL` must be added as a **BUILD variable** (under project Settings > Build > Variables), not a runtime secret, because Vite embeds it into the compiled JavaScript bundle at build time.
 
 ### Step 4: Copy Existing Content
 Because the folder layout is **identical**, copy all folders from `public/content/` directly into the root of your R2 bucket. Your site will immediately stream content from R2!
 
 ---
 
-## 15. One-Page Quick Reference Card
+## 16. One-Page Quick Reference Card
 
 ### Everyday Commands
 ```bash

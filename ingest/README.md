@@ -34,7 +34,7 @@ The Ingest tool operates via a sequential 5-agent pipeline that enforces data sa
 flowchart TD
     User([Instructor / Author]) -->|Single Item Selection| CLI[Interactive CLI Wizard]
     CLI --> A1[Agent 1: Normalize & Validate]
-    
+
     subgraph Pipeline [5-Agent Ingestion Pipeline]
         A1 -->|Sanitized Staged Artifact| A3[Agent 3: Numbering & Duplicate Check]
         A3 -->|Next Sequence & Hash Clearance| A2[Agent 2: Placement & Plan Coordinator]
@@ -50,6 +50,7 @@ flowchart TD
 ```
 
 ### The 5 Autonomous Ingestion Agents
+
 1. **Agent 1 (Normalize & Validate)**:
    - Validates incoming files against Cloudflare limits (10MB warning, 25MB max rejection).
    - Rejects corrupt archives, password-encrypted PDFs, empty files, and legacy `.doc` files.
@@ -77,28 +78,34 @@ flowchart TD
 ## 3. Quick Start
 
 ### Installation
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### Initialize Storage
+
 ```bash
 python ingest.py init
 ```
 
 ### Run Wizard
+
 ```bash
 python ingest.py
 ```
 
 ### Check Content & Limits
+
 ```bash
 python ingest.py stats
 npm run check-content
 ```
 
 ### Publish Content
+
 ```bash
 python ingest.py publish
 ```
+
 Commits only `public/content/` to git with an informative commit message and pushes to Cloudflare Workers Static Assets.
