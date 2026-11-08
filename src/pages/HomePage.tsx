@@ -211,20 +211,13 @@ export default function HomePage() {
 
       {/* Modules List Header */}
       <div>
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-section font-bold text-(--color-text)">
-              Available Course Modules
-            </h2>
-            <p className="text-body-sm text-(--color-text-muted)">
-              Select a module to view lectures, transcripts, labs, and board notes
-            </p>
-          </div>
-          {modules.length > 0 && (
-            <Badge variant="pill" size="md" className="whitespace-nowrap">
-              {modules.length} {modules.length === 1 ? "Module" : "Modules"}
-            </Badge>
-          )}
+        <div className="mb-6">
+          <h2 className="text-section font-bold text-(--color-text)">
+            Available Course Modules
+          </h2>
+          <p className="text-body-sm text-(--color-text-muted)">
+            Select a module to view lectures, transcripts, labs, and board notes
+          </p>
         </div>
 
         {/* Loading Skeletons */}
